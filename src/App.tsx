@@ -23,6 +23,12 @@ import {
   parseDesignStrengthMpa
 } from './utils/storage';
 import { exportSamplesToExcel } from './utils/excelExport';
+import { 
+  checkAndTriggerAutoNotifications, 
+  requestBrowserNotificationPermission,
+  playAlertChime 
+} from './utils/notificationService';
+import { AlertTriangle, Bell, MessageSquare, Volume2, X, Sparkles } from 'lucide-react';
 
 // Components
 import { Header } from './components/Header';
@@ -69,6 +75,10 @@ export default function App() {
 
   const [isUserManagementModalOpen, setIsUserManagementModalOpen] = useState(false);
   const [isGitHubExportModalOpen, setIsGitHubExportModalOpen] = useState(false);
+  const [showAutoAlertBanner, setShowAutoAlertBanner] = useState(true);
+  const [browserNotificationGranted, setBrowserNotificationGranted] = useState(() => {
+    return typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted';
+  });
 
   // If user is station member, default filter to their station
   useEffect(() => {
@@ -77,12 +87,37 @@ export default function App() {
     }
   }, [currentUser]);
 
-  // Recalculate status on mount
+  // Recalculate status and trigger 100% automated notification check on mount & periodically
   useEffect(() => {
     const fresh = recalculateSampleStatuses(loadSamples());
     setSamples(fresh);
     saveSamples(fresh);
-  }, []);
+
+    // 100% Automated Background Notification Check
+    if (currentUser) {
+      checkAndTriggerAutoNotifications(fresh, stations, notificationConfig).catch(console.error);
+    }
+
+    // Interval check every 10 minutes for automatic daily triggers
+    const timer = setInterval(() => {
+      const currentSamples = recalculateSampleStatuses(loadSamples());
+      setSamples(currentSamples);
+      if (currentUser) {
+        checkAndTriggerAutoNotifications(currentSamples, stations, notificationConfig).catch(console.error);
+      }
+    }, 10 * 60 * 1000);
+
+    return () => clearInterval(timer);
+  }, [currentUser, notificationConfig, stations]);
+
+  const handleRequestPushPermission = async () => {
+    const granted = await requestBrowserNotificationPermission();
+    setBrowserNotificationGranted(granted);
+    if (granted) {
+      playAlertChime();
+      alert('Đã bật tính năng Thông Báo Đẩy (Web Push) thành công! Hệ thống sẽ tự động nhắc nhở trên thiết bị.');
+    }
+  };
 
   // Handler: Login
   const handleLogin = (user: User) => {
@@ -291,6 +326,68 @@ export default function App() {
       {/* Main Container */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
         
+        {/* Automatic Realtime Urgent Alert Banner */}
+        {urgentCount > 0 && showAutoAlertBanner && (
+          <div className="bg-gradient-to-r from-red-600 via-rose-600 to-amber-600 text-white p-4 sm:p-5 rounded-2xl shadow-xl shadow-red-600/20 border border-red-500/50 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 animate-in fade-in slide-in-from-top-4 duration-300">
+            <div className="flex items-start sm:items-center space-x-3.5">
+              <div className="w-11 h-11 rounded-xl bg-white/20 backdrop-blur-md flex items-center justify-center shrink-0 text-white animate-pulse">
+                <Bell className="w-6 h-6" />
+              </div>
+              <div>
+                <div className="flex items-center space-x-2">
+                  <span className="bg-white text-red-700 text-[10px] font-black uppercase px-2 py-0.5 rounded tracking-wider">
+                    Cảnh Báo Tự Động
+                  </span>
+                  <span className="text-xs text-red-100 font-semibold">
+                    Thời gian thực
+                  </span>
+                </div>
+                <h3 className="font-black text-sm sm:text-base text-white mt-0.5">
+                  Phát hiện <span className="underline underline-offset-2">{urgentCount} mẫu bê tông</span> có lịch nén cần thực hiện ngay!
+                </h3>
+                <p className="text-xs text-red-100/90 hidden sm:block mt-0.5">
+                  Hệ thống đã tự động tính toán tiến độ. Đề nghị kiểm tra máy nén và liên hệ công trình để tiến hành nén mẫu.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2 w-full md:w-auto justify-end">
+              {!browserNotificationGranted && (
+                <button
+                  type="button"
+                  onClick={handleRequestPushPermission}
+                  className="bg-white/20 hover:bg-white/30 text-white font-bold px-3 py-2 rounded-xl text-xs flex items-center space-x-1.5 transition-all cursor-pointer backdrop-blur-sm"
+                  title="Bật thông báo đẩy lên màn hình điện thoại/máy tính"
+                >
+                  <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+                  <span>Bật Push Thông Báo</span>
+                </button>
+              )}
+
+              <button
+                type="button"
+                onClick={() => {
+                  playAlertChime();
+                  handleOpenNotificationModal();
+                }}
+                className="bg-white text-red-700 hover:bg-red-50 font-black px-4 py-2 rounded-xl text-xs flex items-center space-x-1.5 shadow-md transition-all active:scale-95 cursor-pointer"
+              >
+                <MessageSquare className="w-3.5 h-3.5" />
+                <span>Xem & Bắn Tin Bot Zalo</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setShowAutoAlertBanner(false)}
+                className="text-white/70 hover:text-white p-1.5 rounded-lg hover:bg-white/10 transition-colors cursor-pointer"
+                title="Tạm ẩn cảnh báo"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* KPI Dashboard Stats Bar */}
         <DashboardStats
           samples={samples}

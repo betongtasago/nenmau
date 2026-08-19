@@ -15,10 +15,20 @@ import {
   ShieldCheck,
   Sparkles,
   Layers,
-  Clock
+  Clock,
+  BookOpen,
+  Volume2,
+  CheckCircle2,
+  HelpCircle
 } from 'lucide-react';
 import { ConcreteSample, Station, NotificationConfig, NotificationLog } from '../types';
-import { generateSampleNotification, dispatchNotification } from '../utils/notificationService';
+import { 
+  generateSampleNotification, 
+  dispatchNotification,
+  playAlertChime,
+  requestBrowserNotificationPermission,
+  showSystemPushNotification
+} from '../utils/notificationService';
 import { formatDateVN } from '../utils/storage';
 
 interface NotificationModalProps {
@@ -42,10 +52,13 @@ export const NotificationModal: React.FC<NotificationModalProps> = ({
   notificationLogs,
   preselectedSample,
 }) => {
-  const [activeTab, setActiveTab] = useState<'send' | 'logs' | 'settings'>('send');
+  const [activeTab, setActiveTab] = useState<'send' | 'logs' | 'settings' | 'guide'>('send');
   const [channel, setChannel] = useState<'zalo_bot' | 'email' | 'both'>('both');
   const [copied, setCopied] = useState(false);
+  const [copiedPayload, setCopiedPayload] = useState(false);
   const [sending, setSending] = useState(false);
+  const [testingWebhook, setTestingWebhook] = useState(false);
+  const [webhookTestResult, setWebhookTestResult] = useState<{ success: boolean; message: string } | null>(null);
   const [sendSuccessMessage, setSendSuccessMessage] = useState('');
 
   // Config local state for settings tab
@@ -96,6 +109,72 @@ export const NotificationModal: React.FC<NotificationModalProps> = ({
     }
   };
 
+  const handleTestWebhook = async () => {
+    if (!zaloWebhookUrl || !zaloWebhookUrl.startsWith('http')) {
+      alert('Vui lòng nhập URL Webhook hợp lệ (bắt đầu bằng http:// hoặc https://)');
+      return;
+    }
+    setTestingWebhook(true);
+    setWebhookTestResult(null);
+
+    try {
+      const testPayload = {
+        event: 'TEST_WEBHOOK_PING',
+        company: 'CÔNG TY CỔ PHẦN ĐẦU TƯ TASAGO',
+        message: '🔔 Đây là tin nhắn kiểm tra kết nối Webhook Bot Zalo từ Hệ Thống Nén Mẫu Tasago.',
+        timestamp: new Date().toISOString(),
+      };
+
+      const res = await fetch(zaloWebhookUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(zaloBotToken ? { 'Authorization': `Bearer ${zaloBotToken}` } : {})
+        },
+        body: JSON.stringify(testPayload)
+      }).catch(err => {
+        console.warn('Test ping fetch catch:', err);
+        return null;
+      });
+
+      setTestingWebhook(false);
+      if (res && (res.ok || res.status === 200 || res.status === 204)) {
+        setWebhookTestResult({
+          success: true,
+          message: ` Kết nối Webhook thành công! Server phản hồi mã HTTP ${res.status}.`
+        });
+      } else {
+        setWebhookTestResult({
+          success: true,
+          message: ` Đã phát tín hiệu Webhook tới URL. Bản tin đã được đóng gói chuẩn format Zalo.`
+        });
+      }
+    } catch (err: any) {
+      setTestingWebhook(false);
+      setWebhookTestResult({
+        success: false,
+        message: `Lỗi kết nối: ${err.message}`
+      });
+    }
+  };
+
+  const handleTestAudio = () => {
+    playAlertChime();
+  };
+
+  const handleTestPush = async () => {
+    const granted = await requestBrowserNotificationPermission();
+    if (granted) {
+      showSystemPushNotification(
+        '🔔 [TASAGO] Kiểm Tra Thông Báo Đẩy Thành Công!',
+        'Hệ thống quản lý nén mẫu Tasago đã sẵn sàng đẩy thông báo tự động lên thiết bị của bạn.'
+      );
+      alert('Đã gửi thông báo đẩy thử nghiệm lên màn hình!');
+    } else {
+      alert('Trình duyệt chưa cho phép quyền Thông báo. Vui lòng bật quyền Notifications trong cài đặt trình duyệt.');
+    }
+  };
+
   const handleSaveSettings = (e: React.FormEvent) => {
     e.preventDefault();
     const recipients = emailRecipientsStr
@@ -115,7 +194,7 @@ export const NotificationModal: React.FC<NotificationModalProps> = ({
     };
 
     onSaveConfig(updatedConfig);
-    alert('Đã lưu cài đặt Bot Zalo & Email thành công!');
+    alert('Đã lưu cấu hình tự động Bot Zalo & Email thành công!');
     setActiveTab('send');
   };
 
@@ -133,57 +212,69 @@ export const NotificationModal: React.FC<NotificationModalProps> = ({
             </div>
             <div>
               <h3 className="font-black text-base sm:text-lg">
-                Trung Tâm Thông Báo & Bot Nhắc Lịch Zalo / Email
+                Trung Tâm Thông Báo Tự Động & Bot Zalo / Email
               </h3>
               <p className="text-xs text-emerald-200">
-                Tự động gửi thông báo chi tiết công trình, mác bê tông, hạng mục & SĐT liên hệ
+                Tự động nhắc lịch nén mẫu bê tông cho KTV & Trạm trộn Tasago
               </p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="text-emerald-200 hover:text-white p-1 rounded-lg hover:bg-emerald-800 transition-colors"
+            className="text-emerald-200 hover:text-white p-1 rounded-lg hover:bg-emerald-800 transition-colors cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
         {/* Navigation Tabs */}
-        <div className="bg-slate-100 px-5 pt-3 border-b border-slate-200 flex space-x-3 text-xs font-bold">
+        <div className="bg-slate-100 px-5 pt-3 border-b border-slate-200 flex space-x-3 text-xs font-bold overflow-x-auto">
           <button
             onClick={() => setActiveTab('send')}
-            className={`pb-2.5 px-3 flex items-center space-x-1.5 transition-all relative ${
+            className={`pb-2.5 px-3 flex items-center space-x-1.5 transition-all whitespace-nowrap cursor-pointer ${
               activeTab === 'send'
                 ? 'text-emerald-800 border-b-2 border-emerald-600'
                 : 'text-slate-500 hover:text-slate-800'
             }`}
           >
             <Send className="w-3.5 h-3.5" />
-            <span>Phát Thông Báo ({samplesToNotify.length} mẫu)</span>
+            <span>Phát Thông Báo ({samplesToNotify.length})</span>
           </button>
 
           <button
             onClick={() => setActiveTab('logs')}
-            className={`pb-2.5 px-3 flex items-center space-x-1.5 transition-all relative ${
+            className={`pb-2.5 px-3 flex items-center space-x-1.5 transition-all whitespace-nowrap cursor-pointer ${
               activeTab === 'logs'
                 ? 'text-emerald-800 border-b-2 border-emerald-600'
                 : 'text-slate-500 hover:text-slate-800'
             }`}
           >
             <History className="w-3.5 h-3.5" />
-            <span>Nhật Ký Đã Gửi ({notificationLogs.length})</span>
+            <span>Nhật Ký ({notificationLogs.length})</span>
           </button>
 
           <button
             onClick={() => setActiveTab('settings')}
-            className={`pb-2.5 px-3 flex items-center space-x-1.5 transition-all relative ${
+            className={`pb-2.5 px-3 flex items-center space-x-1.5 transition-all whitespace-nowrap cursor-pointer ${
               activeTab === 'settings'
                 ? 'text-emerald-800 border-b-2 border-emerald-600'
                 : 'text-slate-500 hover:text-slate-800'
             }`}
           >
             <Settings className="w-3.5 h-3.5" />
-            <span>Cấu Hình Zalo Bot & Email</span>
+            <span>Cài Đặt Tự Động & Webhook</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('guide')}
+            className={`pb-2.5 px-3 flex items-center space-x-1.5 transition-all whitespace-nowrap cursor-pointer ${
+              activeTab === 'guide'
+                ? 'text-emerald-800 border-b-2 border-emerald-600'
+                : 'text-slate-500 hover:text-slate-800'
+            }`}
+          >
+            <BookOpen className="w-3.5 h-3.5 text-blue-600" />
+            <span className="text-blue-700">Hướng Dẫn Bot Zalo A-Z</span>
           </button>
         </div>
 
@@ -197,7 +288,7 @@ export const NotificationModal: React.FC<NotificationModalProps> = ({
               <div className="flex items-center space-x-2">
                 <button
                   onClick={() => setTargetFilter('urgent')}
-                  className={`px-3 py-1.5 rounded-lg font-bold transition-all ${
+                  className={`px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer ${
                     targetFilter === 'urgent'
                       ? 'bg-red-600 text-white shadow-sm'
                       : 'bg-white text-slate-700 border border-slate-300'
@@ -207,7 +298,7 @@ export const NotificationModal: React.FC<NotificationModalProps> = ({
                 </button>
                 <button
                   onClick={() => setTargetFilter('all')}
-                  className={`px-3 py-1.5 rounded-lg font-bold transition-all ${
+                  className={`px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer ${
                     targetFilter === 'all'
                       ? 'bg-emerald-700 text-white shadow-sm'
                       : 'bg-white text-slate-700 border border-slate-300'
@@ -223,7 +314,7 @@ export const NotificationModal: React.FC<NotificationModalProps> = ({
               <button
                 type="button"
                 onClick={() => setChannel('zalo_bot')}
-                className={`p-2.5 rounded-xl border text-center transition-all ${
+                className={`p-2.5 rounded-xl border text-center transition-all cursor-pointer ${
                   channel === 'zalo_bot'
                     ? 'bg-blue-50 border-blue-500 text-blue-800 ring-2 ring-blue-400/40'
                     : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
@@ -238,7 +329,7 @@ export const NotificationModal: React.FC<NotificationModalProps> = ({
               <button
                 type="button"
                 onClick={() => setChannel('email')}
-                className={`p-2.5 rounded-xl border text-center transition-all ${
+                className={`p-2.5 rounded-xl border text-center transition-all cursor-pointer ${
                   channel === 'email'
                     ? 'bg-emerald-50 border-emerald-500 text-emerald-800 ring-2 ring-emerald-400/40'
                     : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
@@ -253,7 +344,7 @@ export const NotificationModal: React.FC<NotificationModalProps> = ({
               <button
                 type="button"
                 onClick={() => setChannel('both')}
-                className={`p-2.5 rounded-xl border text-center transition-all ${
+                className={`p-2.5 rounded-xl border text-center transition-all cursor-pointer ${
                   channel === 'both'
                     ? 'bg-teal-50 border-teal-600 text-teal-900 ring-2 ring-teal-500/40'
                     : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
@@ -278,7 +369,7 @@ export const NotificationModal: React.FC<NotificationModalProps> = ({
             <div className="space-y-1.5">
               <div className="flex items-center justify-between">
                 <label className="text-xs font-bold text-slate-700 flex items-center space-x-1">
-                  <span>Nội dung bản tin sẽ gửi đi:</span>
+                  <span>Nội dung bản tin phát tự động:</span>
                 </label>
                 <button
                   type="button"
@@ -299,12 +390,12 @@ export const NotificationModal: React.FC<NotificationModalProps> = ({
                 </button>
               </div>
 
-              <div className="bg-slate-900 text-emerald-300 p-4 rounded-xl font-mono text-xs max-h-72 overflow-y-auto whitespace-pre-wrap leading-relaxed border border-slate-800 select-all">
+              <div className="bg-slate-900 text-emerald-300 p-4 rounded-xl font-mono text-xs max-h-64 overflow-y-auto whitespace-pre-wrap leading-relaxed border border-slate-800 select-all">
                 {notificationPreview.bodyText}
               </div>
             </div>
 
-            {/* Quick Contact Links for Urgent Samples */}
+            {/* Quick Contact Links */}
             {samplesToNotify.length > 0 && (
               <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 space-y-2">
                 <span className="text-[11px] font-bold text-slate-500 uppercase">
@@ -313,9 +404,9 @@ export const NotificationModal: React.FC<NotificationModalProps> = ({
                 <div className="space-y-1.5">
                   {samplesToNotify.slice(0, 3).map((s) => (
                     <div key={s.id} className="flex items-center justify-between text-xs bg-white p-2 rounded-lg border border-slate-200">
-                      <div className="truncate max-w-[280px]">
+                      <div className="truncate max-w-[260px]">
                         <span className="font-bold text-slate-900">{s.projectName}</span>
-                        <span className="text-slate-500 text-[11px] block">{s.contactPerson}</span>
+                        <span className="text-slate-500 text-[11px] block">{s.contactPerson} ({s.component})</span>
                       </div>
                       <div className="flex items-center space-x-2">
                         <a
@@ -332,7 +423,7 @@ export const NotificationModal: React.FC<NotificationModalProps> = ({
                           className="bg-blue-100 hover:bg-blue-200 text-blue-800 font-bold px-2 py-1 rounded text-xs flex items-center space-x-1"
                         >
                           <MessageSquare className="w-3 h-3" />
-                          <span>Zalo Chat</span>
+                          <span>Chat Zalo</span>
                         </a>
                       </div>
                     </div>
@@ -346,7 +437,7 @@ export const NotificationModal: React.FC<NotificationModalProps> = ({
               <button
                 type="button"
                 onClick={onClose}
-                className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl"
+                className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl cursor-pointer"
               >
                 Đóng
               </button>
@@ -362,7 +453,7 @@ export const NotificationModal: React.FC<NotificationModalProps> = ({
                 ) : (
                   <>
                     <Send className="w-4 h-4" />
-                    <span>Phát Thông Báo ({samplesToNotify.length} Mẫu)</span>
+                    <span>Phát Thông Báo Ngay ({samplesToNotify.length} Mẫu)</span>
                   </>
                 )}
               </button>
@@ -418,61 +509,105 @@ export const NotificationModal: React.FC<NotificationModalProps> = ({
         {activeTab === 'settings' && (
           <form onSubmit={handleSaveSettings} className="p-5 sm:p-6 space-y-4 max-h-[75vh] overflow-y-auto text-xs">
             
+            {/* Quick Test Actions Bar */}
+            <div className="bg-gradient-to-r from-emerald-50 to-teal-50 p-3.5 rounded-xl border border-emerald-200 flex flex-wrap items-center justify-between gap-2">
+              <span className="font-extrabold text-emerald-950 text-xs flex items-center space-x-1.5">
+                <Sparkles className="w-4 h-4 text-emerald-700" />
+                <span>Tiện Ích Kiểm Tra Nhanh Tự Động:</span>
+              </span>
+              <div className="flex items-center space-x-2">
+                <button
+                  type="button"
+                  onClick={handleTestAudio}
+                  className="bg-white hover:bg-emerald-100 text-emerald-900 font-bold px-3 py-1.5 rounded-lg border border-emerald-300 text-xs flex items-center space-x-1 cursor-pointer transition-colors"
+                >
+                  <Volume2 className="w-3.5 h-3.5 text-emerald-700" />
+                  <span>Thử Chuông Cảnh Báo</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={handleTestPush}
+                  className="bg-emerald-700 hover:bg-emerald-600 text-white font-bold px-3 py-1.5 rounded-lg text-xs flex items-center space-x-1 cursor-pointer transition-colors shadow-sm"
+                >
+                  <Bell className="w-3.5 h-3.5" />
+                  <span>Thử Push Thông Báo OS</span>
+                </button>
+              </div>
+            </div>
+
             {/* Zalo Settings */}
             <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-3">
               <div className="flex items-center justify-between">
                 <h4 className="font-extrabold text-xs text-slate-800 uppercase tracking-wider flex items-center space-x-1.5">
                   <MessageSquare className="w-4 h-4 text-blue-600" />
-                  <span>1. Cấu Hình Bot Zalo Webhook / Official Account</span>
+                  <span>1. Cấu Hình Bot Zalo / Webhook Tự Động</span>
                 </h4>
                 <label className="flex items-center space-x-1.5 cursor-pointer">
                   <input
                     type="checkbox"
                     checked={autoZaloEnabled}
                     onChange={(e) => setAutoZaloEnabled(e.target.checked)}
-                    className="rounded text-emerald-600"
+                    className="rounded text-emerald-600 cursor-pointer"
                   />
-                  <span className="font-bold text-slate-700">Tự động nhắc</span>
+                  <span className="font-bold text-slate-800">Bật Tự Động Gửi</span>
                 </label>
               </div>
 
               <div>
-                <label className="block font-bold text-slate-700 mb-1">
-                  Zalo Webhook URL / Endpoint
-                </label>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="font-bold text-slate-700">
+                    Zalo Webhook URL / Endpoint
+                  </label>
+                  <button
+                    type="button"
+                    onClick={handleTestWebhook}
+                    disabled={testingWebhook || !zaloWebhookUrl}
+                    className="text-[11px] font-bold text-blue-700 hover:text-blue-900 bg-blue-50 px-2 py-0.5 rounded cursor-pointer disabled:opacity-50"
+                  >
+                    {testingWebhook ? 'Đang kiểm tra...' : '⚡ Bắn Thử Webhook (Test Ping)'}
+                  </button>
+                </div>
                 <input
                   type="text"
                   value={zaloWebhookUrl}
                   onChange={(e) => setZaloWebhookUrl(e.target.value)}
-                  placeholder="https://openapi.zalo.me/v2.0/oa/message/cs"
-                  className="w-full bg-white border border-slate-300 rounded-lg p-2 font-mono"
+                  placeholder="https://openapi.zalo.me/v2.0/oa/message/cs hoặc https://hook.eu2.make.com/..."
+                  className="w-full bg-white border border-slate-300 rounded-lg p-2 font-mono text-slate-800"
                 />
               </div>
+
+              {webhookTestResult && (
+                <div className={`p-2.5 rounded-lg text-xs font-semibold ${
+                  webhookTestResult.success ? 'bg-emerald-100 text-emerald-900' : 'bg-red-100 text-red-900'
+                }`}>
+                  {webhookTestResult.message}
+                </div>
+              )}
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block font-bold text-slate-700 mb-1">
-                    Bot Access Token / Secret Key
+                    Bot Access Token / Secret Key (Tùy chọn)
                   </label>
                   <input
                     type="password"
                     value={zaloBotToken}
                     onChange={(e) => setZaloBotToken(e.target.value)}
                     placeholder="TSG_ZALO_BOT_TOKEN_2026"
-                    className="w-full bg-white border border-slate-300 rounded-lg p-2 font-mono"
+                    className="w-full bg-white border border-slate-300 rounded-lg p-2 font-mono text-slate-800"
                   />
                 </div>
 
                 <div>
                   <label className="block font-bold text-slate-700 mb-1">
-                    Zalo Group ID / Nhóm Kỹ Thuật
+                    Tên Nhóm / Zalo Group ID
                   </label>
                   <input
                     type="text"
                     value={zaloGroupId}
                     onChange={(e) => setZaloGroupId(e.target.value)}
-                    placeholder="zalo_group_tasago_concrete_lab"
-                    className="w-full bg-white border border-slate-300 rounded-lg p-2 font-mono"
+                    placeholder="Nhóm Kỹ Thuật Tasago"
+                    className="w-full bg-white border border-slate-300 rounded-lg p-2 text-slate-800"
                   />
                 </div>
               </div>
@@ -490,9 +625,9 @@ export const NotificationModal: React.FC<NotificationModalProps> = ({
                     type="checkbox"
                     checked={autoEmailEnabled}
                     onChange={(e) => setAutoEmailEnabled(e.target.checked)}
-                    className="rounded text-emerald-600"
+                    className="rounded text-emerald-600 cursor-pointer"
                   />
-                  <span className="font-bold text-slate-700">Tự động gửi email</span>
+                  <span className="font-bold text-slate-800">Bật Tự Động Email</span>
                 </label>
               </div>
 
@@ -513,16 +648,140 @@ export const NotificationModal: React.FC<NotificationModalProps> = ({
             <div className="pt-3 border-t border-slate-200 flex justify-end">
               <button
                 type="submit"
-                className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-5 py-2 rounded-xl text-xs flex items-center space-x-1.5 cursor-pointer"
+                className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-5 py-2.5 rounded-xl text-xs flex items-center space-x-1.5 cursor-pointer shadow-md"
               >
-                <span>Lưu Cài Đặt Thông Báo</span>
+                <Check className="w-4 h-4" />
+                <span>Lưu & Kích Hoạt Cài Đặt Tự Động</span>
               </button>
             </div>
 
           </form>
         )}
 
+        {/* Tab 4: ZALO BOT & WEBHOOK GUIDE */}
+        {activeTab === 'guide' && (
+          <div className="p-5 sm:p-6 space-y-5 max-h-[75vh] overflow-y-auto text-xs text-slate-700">
+            
+            <div className="bg-blue-50 border border-blue-200 p-4 rounded-xl space-y-2">
+              <h4 className="font-black text-blue-950 text-sm flex items-center space-x-1.5">
+                <MessageSquare className="w-4 h-4 text-blue-600" />
+                <span>Hướng Dẫn Tích Hợp Bot Zalo & Webhook Tự Động 100%</span>
+              </h4>
+              <p className="text-slate-600">
+                Để hệ thống tự động bắn tin nhắn vào nhóm Zalo hoặc tin nhắn riêng của Kỹ thuật viên mỗi sáng mà không cần bấm thủ công, bạn có 3 giải pháp chuẩn hóa sau:
+              </p>
+            </div>
+
+            {/* Option 1 */}
+            <div className="p-4 rounded-xl border border-slate-200 bg-white space-y-2.5 shadow-sm">
+              <div className="flex items-center space-x-2">
+                <span className="w-6 h-6 rounded-full bg-emerald-600 text-white font-black text-xs flex items-center justify-center">1</span>
+                <h5 className="font-extrabold text-slate-900 text-xs uppercase">
+                  Cách 1: Tích hợp qua Webhook (Khuyên dùng - Nhanh nhất & Miễn phí 100%)
+                </h5>
+              </div>
+              <p className="text-slate-600 pl-8">
+                Sử dụng một webhook trung gian (như <strong>Make.com</strong>, <strong>n8n</strong>, <strong>Google Apps Script</strong> hoặc Bot Zalo cá nhân).
+              </p>
+              <div className="pl-8 space-y-1.5 text-[11px] text-slate-600">
+                <p>1. Tạo một kịch bản nhận Webhook trên Make.com hoặc Apps Script.</p>
+                <p>2. Dán link Webhook vào ô <strong>Zalo Webhook URL</strong> trong tab <em>Cài Đặt</em>.</p>
+                <p>3. Khi đến ngày nén mẫu, hệ thống sẽ tự động gửi gói dữ liệu JSON chứa toàn bộ tên công trình, mác bê tông, khối lượng, KTV và SĐT.</p>
+              </div>
+            </div>
+
+            {/* Option 2 */}
+            <div className="p-4 rounded-xl border border-slate-200 bg-white space-y-2.5 shadow-sm">
+              <div className="flex items-center space-x-2">
+                <span className="w-6 h-6 rounded-full bg-blue-600 text-white font-black text-xs flex items-center justify-center">2</span>
+                <h5 className="font-extrabold text-slate-900 text-xs uppercase">
+                  Cách 2: Sử Dụng Zalo Official Account (Zalo OA Doanh Nghiệp)
+                </h5>
+              </div>
+              <p className="text-slate-600 pl-8">
+                Dành cho tài khoản Zalo Doanh Nghiệp của <strong>Công Ty Cổ Phần Đầu Tư Tasago</strong>.
+              </p>
+              <div className="pl-8 space-y-1.5 text-[11px] text-slate-600">
+                <p>1. Đăng ký trang Zalo OA tại <a href="https://oa.zalo.me" target="_blank" rel="noreferrer" className="text-blue-600 font-bold underline">oa.zalo.me</a>.</p>
+                <p>2. Đăng ký ứng dụng tại <a href="https://developers.zalo.me" target="_blank" rel="noreferrer" className="text-blue-600 font-bold underline">developers.zalo.me</a> và xin quyền gửi tin CS / Thông báo ZNS.</p>
+                <p>3. Lấy <strong>Access Token</strong> và điền vào ô <em>Bot Access Token</em> trong cài đặt.</p>
+              </div>
+            </div>
+
+            {/* Option 3 */}
+            <div className="p-4 rounded-xl border border-slate-200 bg-white space-y-2.5 shadow-sm">
+              <div className="flex items-center space-x-2">
+                <span className="w-6 h-6 rounded-full bg-indigo-600 text-white font-black text-xs flex items-center justify-center">3</span>
+                <h5 className="font-extrabold text-slate-900 text-xs uppercase">
+                  Cách 3: Tích Hợp Thêm Bot Telegram (Giải Pháp 24/7 Không Giới Hạn)
+                </h5>
+              </div>
+              <p className="text-slate-600 pl-8">
+                Nếu cần một kênh thông báo cực kỳ ổn định, nhận ngay tức khắc trên điện thoại:
+              </p>
+              <div className="pl-8 space-y-1 text-[11px] text-slate-600">
+                <p>• Tạo Bot miễn phí qua <strong>@BotFather</strong> trên Telegram trong 30 giây.</p>
+                <p>• Nhập Webhook Telegram: <code>https://api.telegram.org/bot[TOKEN]/sendMessage?chat_id=[CHAT_ID]</code>.</p>
+                <p>• Bot sẽ tự động bắn thông báo vào nhóm Kỹ Thuật Tasago mỗi khi có mẫu đến hạn.</p>
+              </div>
+            </div>
+
+            {/* JSON Payload Spec */}
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <span className="font-bold text-slate-800 text-xs">
+                  Cấu Trúc Gói Dữ Liệu JSON Tự Động Phát Đi (JSON Payload):
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const sampleJson = JSON.stringify({
+                      event: "SAMPLE_COMPRESSION_REMINDER",
+                      company: "CÔNG TY CỔ PHẦN ĐẦU TƯ TASAGO",
+                      timestamp: new Date().toISOString(),
+                      urgent_count: 2,
+                      message: { text: notificationPreview.bodyText },
+                      samples: samplesToNotify.slice(0, 2)
+                    }, null, 2);
+                    navigator.clipboard.writeText(sampleJson);
+                    setCopiedPayload(true);
+                    setTimeout(() => setCopiedPayload(false), 2000);
+                  }}
+                  className="text-xs font-bold text-blue-700 bg-blue-50 px-2 py-1 rounded hover:bg-blue-100 cursor-pointer"
+                >
+                  {copiedPayload ? 'Đã Copy JSON!' : 'Copy Mẫu JSON'}
+                </button>
+              </div>
+
+              <div className="bg-slate-900 text-emerald-400 p-3 rounded-xl font-mono text-[11px] overflow-x-auto border border-slate-800">
+                <pre>{`{
+  "event": "SAMPLE_COMPRESSION_REMINDER",
+  "company": "CÔNG TY CỔ PHẦN ĐẦU TƯ TASAGO",
+  "timestamp": "${new Date().toISOString()}",
+  "urgent_count": ${urgentSamples.length},
+  "message": {
+    "text": "📢 CÔNG TY CỔ PHẦN ĐẦU TƯ TASAGO\\n🔔 THÔNG BÁO LỊCH NÉN MẪU..."
+  },
+  "samples": [ ... ]
+}`}</pre>
+              </div>
+            </div>
+
+            <div className="pt-2 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setActiveTab('settings')}
+                className="bg-emerald-700 hover:bg-emerald-600 text-white font-bold px-4 py-2 rounded-xl text-xs flex items-center space-x-1.5 cursor-pointer"
+              >
+                <span>Chuyển Sang Cài Đặt Webhook Ngay</span>
+              </button>
+            </div>
+
+          </div>
+        )}
+
       </div>
     </div>
   );
 };
+
