@@ -264,7 +264,7 @@ export default function App() {
 
   // If not logged in, show AuthScreen
   if (!currentUser) {
-    return <AuthScreen onLogin={handleLogin} users={users} />;
+    return <AuthScreen onLogin={handleLogin} onLoginSuccess={handleLogin} users={users} />;
   }
 
   // Count urgent samples for notification badge

@@ -10,28 +10,35 @@ import {
   ShieldCheck
 } from 'lucide-react';
 import { User } from '../types';
+import { INITIAL_USERS } from '../data/initialData';
 
 interface AuthScreenProps {
-  users: User[];
-  onLoginSuccess: (user: User) => void;
+  users?: User[];
+  onLogin?: (user: User) => void;
+  onLoginSuccess?: (user: User) => void;
 }
 
-export const AuthScreen: React.FC<AuthScreenProps> = ({ users, onLoginSuccess }) => {
+export const AuthScreen: React.FC<AuthScreenProps> = ({ users, onLogin, onLoginSuccess }) => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const [loading, setLoading] = useState(false);
 
+  const loginCallback = onLoginSuccess || onLogin || (() => {});
+
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg('');
     setLoading(true);
 
-    setTimeout(() => {
+    try {
+      const userList = (users && users.length > 0) ? users : INITIAL_USERS;
       const trimmedUser = username.trim().toLowerCase();
-      const found = users.find(
-        (u) => u.username.toLowerCase() === trimmedUser && u.password === password
+      const trimmedPass = password.trim();
+
+      const found = userList.find(
+        (u) => u.username.toLowerCase() === trimmedUser && (u.password === password || u.password === trimmedPass)
       );
 
       if (found) {
@@ -40,12 +47,17 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ users, onLoginSuccess })
           setLoading(false);
           return;
         }
-        onLoginSuccess(found);
+        setLoading(false);
+        loginCallback(found);
       } else {
         setErrorMsg('Tên đăng nhập hoặc mật khẩu không chính xác. Vui lòng kiểm tra lại.');
+        setLoading(false);
       }
+    } catch (err) {
+      console.error('Login error:', err);
+      setErrorMsg('Đã xảy ra lỗi trong quá trình xác thực. Vui lòng thử lại.');
       setLoading(false);
-    }, 300);
+    }
   };
 
   return (
