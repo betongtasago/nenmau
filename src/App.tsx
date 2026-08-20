@@ -94,19 +94,19 @@ export default function App() {
     setSamples(fresh);
     saveSamples(fresh);
 
-    // 100% Automated Background Notification Check
+    // 100% Automated Background Notification Check (Triggers at 07:00 AM VN Time)
     if (currentUser) {
       checkAndTriggerAutoNotifications(fresh, stations, notificationConfig).catch(console.error);
     }
 
-    // Interval check every 10 minutes for automatic daily triggers
+    // Interval check every 30 seconds for precise 07:00 AM daily triggers
     const timer = setInterval(() => {
       const currentSamples = recalculateSampleStatuses(loadSamples());
       setSamples(currentSamples);
       if (currentUser) {
         checkAndTriggerAutoNotifications(currentSamples, stations, notificationConfig).catch(console.error);
       }
-    }, 10 * 60 * 1000);
+    }, 30 * 1000);
 
     return () => clearInterval(timer);
   }, [currentUser, notificationConfig, stations]);

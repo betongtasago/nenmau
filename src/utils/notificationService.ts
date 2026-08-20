@@ -250,36 +250,57 @@ export async function checkAndTriggerAutoNotifications(
     return { triggered: false, urgentCount: 0, message: 'Không có mẫu nào đến hạn hoặc quá hạn hôm nay.' };
   }
 
+  // Check current hour in Vietnam timezone (GMT+7)
+  const vnTimeStr = new Date().toLocaleTimeString('vi-VN', {
+    timeZone: 'Asia/Ho_Chi_Minh',
+    hour12: false
+  });
+  const currentVnHour = Number(vnTimeStr.split(':')[0]);
+  const targetHour = config.autoSendHour ?? 7;
+
   const todayStr = new Date().toISOString().split('T')[0];
   const lastAutoRunKey = `tasago_last_auto_notif_${todayStr}`;
   const alreadyRanToday = localStorage.getItem(lastAutoRunKey);
 
-  // If already notified today and not forced, only trigger local audio if not done
-  if (alreadyRanToday && !forceRun) {
-    return { 
-      triggered: false, 
-      urgentCount: urgentSamples.length, 
-      message: `Hôm nay (${formatDateVN(todayStr)}) đã tự động gửi thông báo cho ${urgentSamples.length} mẫu nén.` 
-    };
+  // If not forcing, check if we reached the scheduled hour (e.g. 7h sáng) and haven't run today
+  if (!forceRun) {
+    if (currentVnHour < targetHour) {
+      return {
+        triggered: false,
+        urgentCount: urgentSamples.length,
+        message: `Chưa đến giờ gửi thông báo tự động (Cài đặt: ${String(targetHour).padStart(2, '0')}:00 Sáng hàng ngày, hiện tại: ${vnTimeStr}).`
+      };
+    }
+
+    if (alreadyRanToday) {
+      return { 
+        triggered: false, 
+        urgentCount: urgentSamples.length, 
+        message: `Hôm nay (${formatDateVN(todayStr)}) lúc ${String(targetHour).padStart(2, '0')}:00 sáng đã gửi thông báo tự động cho ${urgentSamples.length} mẫu nén.` 
+      };
+    }
   }
 
-  // 1. Play alert sound
-  playAlertChime();
+  // 1. Play alert sound if enabled
+  if (config.enableSoundAlert) {
+    playAlertChime();
+  }
 
   // 2. Trigger Native OS / Browser Push Notification
   if ('Notification' in window && Notification.permission === 'granted') {
     const dueTodayCount = urgentSamples.filter(s => s.status === 'due_today').length;
     const overdueCount = urgentSamples.filter(s => s.status === 'overdue').length;
     showSystemPushNotification(
-      `🔔 [TASAGO] CẢNH BÁO ${urgentSamples.length} MẪU NÉN BÊ TÔNG!`,
-      `Hôm nay có ${dueTodayCount} mẫu đến hạn nén và ${overdueCount} mẫu quá hạn chưa nén. Vui lòng kiểm tra và cập nhật kết quả.`
+      `🔔 [TASAGO] CẢNH BÁO ${urgentSamples.length} MẪU NÉN BÊ TÔNG (07:00 SÁNG)!`,
+      `Hôm nay có ${dueTodayCount} mẫu đến hạn nén và ${overdueCount} mẫu quá hạn. Hệ thống đang tự động gửi báo cáo qua Email & Zalo.`
     );
   }
 
-  // 3. Trigger Zalo Webhook / Email if configured
+  // 3. Trigger Zalo Webhook & Real Email Dispatch
+  let dispatchResult = { success: true, message: '' };
   if (config.autoZaloEnabled || config.autoEmailEnabled || forceRun) {
     const channel = config.autoZaloEnabled && config.autoEmailEnabled ? 'both' : config.autoZaloEnabled ? 'zalo_bot' : 'email';
-    await dispatchNotification(urgentSamples, stations, config, channel);
+    dispatchResult = await dispatchNotification(urgentSamples, stations, config, channel);
   }
 
   // Mark as triggered for today
@@ -288,11 +309,11 @@ export async function checkAndTriggerAutoNotifications(
   return {
     triggered: true,
     urgentCount: urgentSamples.length,
-    message: `Đã tự động kích hoạt thông báo cho ${urgentSamples.length} mẫu bê tông đến hạn nén!`
+    message: dispatchResult.message || `Đã tự động gửi thông báo 07:00 sáng cho ${urgentSamples.length} mẫu bê tông đến hạn nén!`
   };
 }
 
-// Dispatch Notification to Zalo Bot / Webhook / Email
+// Dispatch Notification to Zalo Bot / Webhook / Email via Backend API
 export async function dispatchNotification(
   samples: ConcreteSample[],
   stations: Station[],
@@ -305,6 +326,7 @@ export async function dispatchNotification(
 
   const notif = generateSampleNotification(samples, stations);
   const logIds: string[] = [];
+  const results: string[] = [];
 
   // 1. Zalo Dispatch
   if (channel === 'zalo_bot' || channel === 'both') {
@@ -313,7 +335,6 @@ export async function dispatchNotification(
 
     try {
       if (config.zaloWebhookUrl && config.zaloWebhookUrl.startsWith('http')) {
-        // Attempt webhook post with JSON payload
         const res = await fetch(config.zaloWebhookUrl, {
           method: 'POST',
           headers: {
@@ -352,14 +373,17 @@ export async function dispatchNotification(
 
         if (res && (res.ok || res.status === 200 || res.status === 204)) {
           zaloStatus = 'success';
-          errorDetails = 'Đã gửi thành công qua Webhook Zalo Bot!';
+          errorDetails = 'Đã bắn tin thành công vào Nhóm Zalo Kỹ Thuật!';
+          results.push('Zalo Bot: Thành công');
         } else {
           zaloStatus = 'simulated';
-          errorDetails = `Gửi qua Webhook (Mã phản hồi: ${res ? res.status : 'CORS/Preview'}). Bản tin đã được tạo và lưu nhật ký tự động.`;
+          errorDetails = `Gửi qua Webhook (Mã phản hồi: ${res ? res.status : 'Local/Preview'}). Nhật ký thông báo đã được lưu.`;
+          results.push('Zalo Bot: Đã lưu bản tin');
         }
       } else {
         zaloStatus = 'simulated';
         errorDetails = 'Chưa cấu hình Zalo Webhook URL - Đã tạo bản tin tự động trong hệ thống';
+        results.push('Zalo Bot: Sẵn sàng');
       }
     } catch (e: any) {
       zaloStatus = 'simulated';
@@ -378,24 +402,80 @@ export async function dispatchNotification(
     logIds.push(log.id);
   }
 
-  // 2. Email Dispatch
+  // 2. Real Email Dispatch via Express Server / Webhook API
   if (channel === 'email' || channel === 'both') {
-    const recipients = config.emailRecipients.join(', ');
+    const recipients = config.emailRecipients.filter(r => r.trim().length > 0);
+    const recipientsStr = recipients.join(', ') || 'kythuat@tasago.vn, thanhtgndt@gmail.com';
+    let emailStatus: 'success' | 'failed' | 'simulated' = 'success';
+    let emailError: string | undefined;
+
+    try {
+      const response = await fetch('/api/notifications/send-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          recipients: recipients.length > 0 ? recipients : ['kythuat@tasago.vn', 'thanhtgndt@gmail.com'],
+          subject: notif.title,
+          html: notif.htmlContent,
+          plainText: notif.bodyText,
+          smtpConfig: {
+            smtpHost: config.smtpHost,
+            smtpPort: config.smtpPort,
+            smtpUser: config.smtpUser,
+            smtpPass: config.smtpPass,
+            smtpSecure: config.smtpSecure,
+            smtpFrom: config.emailSender,
+            emailServiceUrl: config.emailServiceUrl
+          },
+          emailServiceUrl: config.emailServiceUrl
+        })
+      });
+
+      const data = await response.json().catch(() => null);
+
+      if (response.ok && data?.success) {
+        emailStatus = 'success';
+        emailError = data.message || `Đã gửi email thành công tới ${recipientsStr}`;
+        results.push(`Email: Đã gửi tới ${recipients.length} địa chỉ`);
+      } else {
+        emailStatus = data?.channel === 'ready_mode' ? 'success' : 'failed';
+        emailError = data?.message || 'Không thể kết nối máy chủ gửi email';
+        results.push(`Email: ${emailError}`);
+      }
+    } catch (e: any) {
+      console.warn('Email dispatch server call note:', e);
+      emailStatus = 'simulated';
+      emailError = `Bản tin email HTML đã tạo sẵn sàng gửi tới ${recipientsStr}`;
+      results.push('Email: Đã tạo bản tin');
+    }
+
     const log = addNotificationLog({
       channel: 'email',
-      recipient: recipients || 'kythuat@tasago.vn',
+      recipient: recipientsStr,
       sampleIds: samples.map(s => s.id),
       sampleInfoSummary: notif.sampleSummary,
       messageContent: notif.htmlContent,
-      status: 'success',
-      errorDetails: 'Đã sẵn sàng gửi bản tin Email HTML đến ' + (recipients || 'kỹ thuật Tasago'),
+      status: emailStatus,
+      errorDetails: emailError,
     });
     logIds.push(log.id);
   }
 
   return {
     success: true,
-    message: `Đã phát thông báo thành công cho ${samples.length} mẫu bê tông qua kênh ${channel === 'both' ? 'Zalo Bot & Email' : channel === 'zalo_bot' ? 'Zalo Bot' : 'Email'}.`,
+    message: `Đã kích hoạt gửi thông báo (${results.join(' | ')}) cho ${samples.length} mẫu nén.`,
     logIds,
   };
+}
+
+// Generate direct mailto: URL for instant email client composer
+export function generateMailtoUrl(
+  recipients: string[],
+  subject: string,
+  bodyText: string
+): string {
+  const to = recipients.filter(r => r.includes('@')).join(',');
+  const encodedSubject = encodeURIComponent(subject);
+  const encodedBody = encodeURIComponent(bodyText);
+  return `mailto:${to}?subject=${encodedSubject}&body=${encodedBody}`;
 }

@@ -132,7 +132,14 @@ export interface NotificationConfig {
   emailSender: string;
   reminderDaysBefore: number; // 0 = ngày đến hạn, 1 = trước 1 ngày
   autoSendHour: number;       // Giờ gửi tự động (ví dụ: 7 = 7:00 sáng)
+  autoSendMinute?: number;     // Phút gửi tự động (mặc định: 0)
   enableSoundAlert: boolean;
+  smtpHost?: string;
+  smtpPort?: number;
+  smtpUser?: string;
+  smtpPass?: string;
+  smtpSecure?: boolean;
+  emailServiceUrl?: string;   // Google Apps Script / Endpoint gửi email miễn phí
 }
 
 export interface SampleFilterOptions {
