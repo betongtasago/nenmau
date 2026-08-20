@@ -29,8 +29,8 @@ async function startServer() {
   // Health check endpoint
   app.get('/api/health', (req, res) => {
     const vnTime = new Date().toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' });
-    res.json({ 
-      status: 'ok', 
+    res.json({
+      status: 'ok',
       service: 'Tasago Concrete Testing Portal Backend',
       vietnamTime: vnTime,
       nodeVersion: process.version
@@ -47,7 +47,7 @@ async function startServer() {
         plainText,
         smtpConfig,
         emailServiceUrl
-n      } = req.body;
+      } = req.body;
 
       if (!recipients || !Array.isArray(recipients) || recipients.length === 0) {
         return res.status(400).json({
@@ -192,7 +192,7 @@ n      } = req.body;
       return res.status(200).json({
         success: true,
         channel: 'ready_mode',
-        message: `Đã đóng gói bản tin HTML hoàn chỉnh cho ${validRecipients.length} email (${validRecipients.join(', ')}). Để gửi trực tiếp qua hòm thư thật 24/7, bạn có[...]",
+        message: `Đã đóng gói bản tin HTML hoàn chỉnh cho ${validRecipients.length} email (${validRecipients.join(', ')}). Để gửi trực tiếp, hãy cấu hình SMTP hoặc sử dụng dịch vụ gửi thư (Resend / webhook).`,
         recipients: validRecipients,
         previewSubject: emailSubject,
         recipientList: validRecipients
@@ -212,11 +212,11 @@ n      } = req.body;
   setInterval(() => {
     try {
       const vnDate = new Date().toLocaleDateString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' });
-      const vnTimeParts = new Date().toLocaleTimeString('vi-VN', { 
-        timeZone: 'Asia/Ho_Chi_Minh', 
-        hour12: false 
+      const vnTimeParts = new Date().toLocaleTimeString('vi-VN', {
+        timeZone: 'Asia/Ho_Chi_Minh',
+        hour12: false
       }).split(':');
-      
+
       const hour = Number(vnTimeParts[0]);
       const minute = Number(vnTimeParts[1]);
 
