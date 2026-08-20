@@ -5,13 +5,11 @@ on:
     branches: ["main", "master"]
   workflow_dispatch:
 
-# Sets permissions of the GITHUB_TOKEN to allow deployment to GitHub Pages
 permissions:
   contents: read
   pages: write
   id-token: write
 
-# Allow only one concurrent deployment, skipping runs queued between the run in-progress and latest queued.
 concurrency:
   group: "pages"
   cancel-in-progress: true
@@ -32,13 +30,17 @@ jobs:
           node-version: 20
 
       - name: Install Dependencies
-        run: npm install --include=dev --legacy-peer-deps
+        run: |
+          npm install --include=dev --legacy-peer-deps
 
       - name: Build Production Web App
-        run: npm run build
+        run: |
+          npx vite build --base=./
 
       - name: Create .nojekyll for GitHub Pages
-        run: touch ./dist/.nojekyll
+        run: |
+          mkdir -p dist
+          touch dist/.nojekyll
 
       - name: Setup Pages Configuration
         uses: actions/configure-pages@v5
