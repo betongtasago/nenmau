@@ -105,3 +105,8 @@ git push -u origin main
 **CÔNG TY CỔ PHẦN ĐẦU TƯ TASAGO**  
 *BÊ TÔNG XANH SÀI GÒN - BÊ TÔNG CỦA MỌI CÔNG TRÌNH*  
 Phòng Quản Lý Kỹ Thuật & Kiểm Định Chất Lượng Bê Tông (QA/QC)
+
+
+### Cấu hình gửi Email trên Vercel
+
+Khai báo trong **Project Settings → Environment Variables** (Production): `SMTP_HOST`, `SMTP_PORT` (`465` hoặc `587`), `SMTP_SECURE` (`true` cho 465, `false` cho 587), `SMTP_USER`, `SMTP_PASS` (Gmail cần App Password), `SMTP_FROM` và `EMAIL_RECIPIENTS` (danh sách phân cách bằng dấu phẩy cho Vercel Cron). Nếu không có SMTP hoặc `RESEND_API_KEY`, endpoint trả lỗi rõ ràng thay vì báo gửi thành công giả.
