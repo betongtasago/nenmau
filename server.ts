@@ -3,11 +3,11 @@ import nodemailer from 'nodemailer';
 
 async function startServer() {
   const app = express();
-  const PORT = Number(process.env.PORT || 3000);
-  const allowedOrigin = process.env.FRONTEND_ORIGIN || '*';
+  const PORT = process.env.PORT || 3001;
+  const allowedOrigin = process.env.ALLOWED_ORIGIN || 'http://localhost:3000';
 
-  app.use(express.json({ limit: '10mb' }));
-  app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+  app.use(express.json({ limit: '50mb' }));
+  app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
   app.use((req, res, next) => {
     res.setHeader('Access-Control-Allow-Origin', allowedOrigin);
@@ -29,8 +29,9 @@ async function startServer() {
 
   app.post('/api/notifications/send-email', async (req, res) => {
     try {
-      const { recipients, subject, html, plainText } = req.body;
-      if (!Array.isArray(recipients) || recipients.length === 0) {
+      const { recipients, subject, plainText, html } = req.body;
+
+      if (!recipients || !Array.isArray(recipients) || recipients.length === 0) {
         return res.status(400).json({ success: false, message: 'Danh sách địa chỉ email người nhận không được để trống.' });
       }
 
