@@ -16,16 +16,16 @@ Hệ thống phần mềm chuyên dụng hỗ trợ theo dõi, cảnh báo tiế
 ## 🌟 Các Tính Năng Nổi Bật
 
 1. **Quản Lý Đa Trạm Trộn Bê Tông:**
-   - Trạm Tasago Hiệp Phước (KCN Hiệp Phước, Nhà Bè, TP.HCM)
-   - Trạm Tasago Cát Lái (Cảng Cát Lái, TP. Thủ Đức, TP.HCM)
+   - Trạm Tasago Hóc Môn (Hóc Môn, TP.HCM)
+   - Trạm Tasago Xuyên Á (Kcn Xuyên Á, Tây Ninh)
    - Trạm Tasago Tân Phú (KCN Tân Bình / Tân Phú, TP.HCM)
-   - Trạm Tasago Bình Dương (TX. Tân Uyên / Dĩ An, Bình Dương)
-   - Trạm Tasago Long An (Bến Lức, Long An)
+   - Trạm Tasago-Tnt1 Tây Ninh (Kcn Thành Thành Công)
+   - Trạm Tasago-Tnt2 Tây Ninh (Kcn Phước Đông)
 
 2. **Quản Lý Mẫu Nén Chi Tiết:**
    - Hỗ trợ bê tông thương phẩm đã cấp cho công trình và mẫu cấp phối thí nghiệm Trialmix.
    - Các mác thiết kế: M150 đến M600, Bê tông chống thấm (B6, B8, B10, B12), Bê tông bù co ngót, R3, R7, R14, R28.
-   - Nhập số lượng tổ mẫu, số viên, độ sụt, khối lượng $m^3$, KTV lấy mẫu, người liên hệ công trình.
+   - Nhập số lượng tổ mẫu, số viên, độ sụt, khối lượng, KTV lấy mẫu, người liên hệ công trình.
 
 3. **Cảnh Báo & Nhắc Nhở Tự Động:**
    - Đánh dấu trạng thái tự động theo thời gian thực: *Đến hạn hôm nay*, *Quá hạn chưa nén*, *Chưa đến hạn*, *Đã nén đạt / không đạt*.
