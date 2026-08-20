@@ -199,32 +199,35 @@ git push -u origin main`;
             <div className="flex items-center justify-between">
               <h4 className="font-extrabold text-slate-900 uppercase flex items-center space-x-1.5">
                 <Github className="w-4 h-4 text-slate-800" />
-                <span>2. Tải Mã Nguồn & Đẩy Lên GitHub</span>
+                <span>2. Đẩy Mã Nguồn Lên GitHub & Khắc Phục Lỗi</span>
               </h4>
               <button
                 type="button"
                 onClick={handleCopyGitCommands}
-                className="text-emerald-700 hover:text-emerald-900 font-bold flex items-center space-x-1 text-[11px] bg-emerald-50 px-2 py-1 rounded"
+                className="text-emerald-700 hover:text-emerald-900 font-bold flex items-center space-x-1 text-[11px] bg-emerald-50 px-2 py-1 rounded cursor-pointer"
               >
                 {copiedScript ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3" />}
-                <span>{copiedScript ? 'Đã Copy Lệnh!' : 'Copy Lệnh Git'}</span>
+                <span>{copiedScript ? 'Đã Copy Lệnh!' : 'Copy Lệnh Git Chuẩn'}</span>
               </button>
             </div>
 
             <p className="text-slate-600">
-              Bạn có thể tải toàn bộ mã nguồn ứng dụng qua menu <strong>Export / ZIP</strong> ở góc trên AI Studio, giải nén và chạy các lệnh Git sau trong thư mục dự án:
+              Chạy các lệnh Git chuẩn bên dưới trong thư mục dự án trên máy tính:
             </p>
 
             <div className="bg-slate-900 text-emerald-400 p-3 rounded-xl font-mono text-[11px] overflow-x-auto border border-slate-800 select-all">
               <pre>{gitCommands}</pre>
             </div>
 
-            <div className="text-[11px] text-slate-500 space-y-1 bg-white p-3 rounded-lg border border-slate-200">
-              <p><strong>Cấu trúc dự án sẵn sàng cho GitHub & Cloud:</strong></p>
-              <ul className="list-disc pl-4 space-y-0.5">
-                <li><code>package.json</code>: Đầy đủ các gói React 19, Recharts, Tailwind CSS v4, Lucide, XLSX.</li>
-                <li><code>/src/data/initialData.ts</code>: Đã tích hợp sẵn dữ liệu 5 trạm bê tông và mẫu thử nghiệm.</li>
-                <li><code>/src/utils/storage.ts</code>: Tự động lưu trữ offline và đồng bộ trình duyệt.</li>
+            <div className="bg-amber-50 border border-amber-200 p-3 rounded-xl text-slate-700 space-y-1.5 text-[11px]">
+              <span className="font-bold text-amber-900 flex items-center space-x-1">
+                <Sparkles className="w-3.5 h-3.5 text-amber-600" />
+                <span>Khắc phục lỗi khi đẩy lên GitHub (Troubleshooting):</span>
+              </span>
+              <ul className="list-disc pl-4 space-y-1 text-slate-600">
+                <li><strong>Lỗi "Updates were rejected / fetch first":</strong> Chạy lệnh <code>git push -u origin main --force</code> (để ghi đè bản mới nhất lên GitHub).</li>
+                <li><strong>Lỗi GitHub Actions "build-and-deploy" báo đỏ:</strong> Vào GitHub Repo $\rightarrow$ <strong>Settings</strong> $\rightarrow$ <strong>Pages</strong> $\rightarrow$ Ở mục <em>Source</em> chọn <strong>GitHub Actions</strong>.</li>
+                <li><strong>Workflow deploy.yml:</strong> Đã được tối ưu tự động tương thích với Node 20 & Vite.</li>
               </ul>
             </div>
           </div>
