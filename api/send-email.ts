@@ -13,8 +13,7 @@ export default async function handler(req: any, res: any) {
     if (recipients.length === 0) return res.status(400).json({ success: false, message: 'Không có địa chỉ email hợp lệ.' });
     const subject = body.subject || '[TASAGO] Thông báo lịch nén mẫu bê tông';
     const text = body.plainText || '';
-    const html = body.html || '<p>' + text.replace(/
-/g, '<br>') + '</p>';
+    const html = body.html || '<p>' + text.replace(/\\n/g, '<br>') + '</p>';
     const supplied = body.smtpConfig || {};
     const host = process.env.SMTP_HOST || supplied.smtpHost;
     const port = Number(process.env.SMTP_PORT || supplied.smtpPort || 587);
