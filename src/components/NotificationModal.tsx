@@ -672,57 +672,118 @@ export const NotificationModal: React.FC<NotificationModalProps> = ({
               </p>
             </div>
 
-            {/* Option 1 */}
-            <div className="p-4 rounded-xl border border-slate-200 bg-white space-y-2.5 shadow-sm">
-              <div className="flex items-center space-x-2">
-                <span className="w-6 h-6 rounded-full bg-emerald-600 text-white font-black text-xs flex items-center justify-center">1</span>
-                <h5 className="font-extrabold text-slate-900 text-xs uppercase">
-                  Cách 1: Tích hợp qua Webhook (Khuyên dùng - Nhanh nhất & Miễn phí 100%)
-                </h5>
+            {/* Option 1: Google Apps Script */}
+            <div className="p-4 rounded-xl border border-emerald-300 bg-emerald-50/40 space-y-3 shadow-sm">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-2">
+                  <span className="w-6 h-6 rounded-full bg-emerald-700 text-white font-black text-xs flex items-center justify-center">1</span>
+                  <h5 className="font-extrabold text-emerald-950 text-xs uppercase">
+                    Cách 1: Google Apps Script (100% Miễn Phí Vĩnh Viễn - Dễ Nhất)
+                  </h5>
+                </div>
+                <span className="bg-emerald-200 text-emerald-900 text-[10px] font-black px-2 py-0.5 rounded">
+                  Khuyên Dùng
+                </span>
               </div>
-              <p className="text-slate-600 pl-8">
-                Sử dụng một webhook trung gian (như <strong>Make.com</strong>, <strong>n8n</strong>, <strong>Google Apps Script</strong> hoặc Bot Zalo cá nhân).
+              <p className="text-slate-600 pl-8 leading-relaxed">
+                Bạn không cần mua máy chủ. Tạo 1 Web App bằng Google Apps Script để nhận dữ liệu nén mẫu từ Tasago, tự động ghi sổ Google Sheets và chuyển tiếp tin nhắn đến Bot Zalo / Telegram / Email.
               </p>
-              <div className="pl-8 space-y-1.5 text-[11px] text-slate-600">
-                <p>1. Tạo một kịch bản nhận Webhook trên Make.com hoặc Apps Script.</p>
-                <p>2. Dán link Webhook vào ô <strong>Zalo Webhook URL</strong> trong tab <em>Cài Đặt</em>.</p>
-                <p>3. Khi đến ngày nén mẫu, hệ thống sẽ tự động gửi gói dữ liệu JSON chứa toàn bộ tên công trình, mác bê tông, khối lượng, KTV và SĐT.</p>
+              <div className="pl-8 space-y-2 text-[11px] text-slate-700">
+                <div className="bg-white p-3 rounded-lg border border-emerald-200 space-y-1.5">
+                  <p className="font-bold text-emerald-900">Các bước thực hiện trong 2 phút:</p>
+                  <p>1. Truy cập <a href="https://script.google.com" target="_blank" rel="noreferrer" className="text-blue-600 font-bold underline">script.google.com</a> $\rightarrow$ Nhấn <strong>"Dự án mới" (New Project)</strong>.</p>
+                  <p>2. Xóa hết code cũ và dán đoạn mã mẫu bên dưới vào.</p>
+                  <p>3. Nhấn <strong>Triển khai (Deploy)</strong> $\rightarrow$ Chọn <strong>Tùy chọn triển khai mới (New deployment)</strong>.</p>
+                  <p>4. Chọn loại: <strong>Ứng dụng web (Web app)</strong>. Ở mục <em>"Ai có quyền truy cập" (Who has access)</em> $\rightarrow$ Chọn <strong>Bất kỳ ai (Anyone)</strong>.</p>
+                  <p>5. Nhấn <strong>Triển khai</strong> và sao chép <strong>URL Ứng dụng web (Web App URL)</strong> dán vào ô <em>Zalo Webhook URL</em> ở tab Cài Đặt.</p>
+                </div>
+
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-slate-800 text-xs">Mã nguồn Google Apps Script (Sẵn sàng chạy):</span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const scriptCode = `// Google Apps Script Webhook Endpoint cho Tasago Concrete Lab
+function doPost(e) {
+  try {
+    var data = JSON.parse(e.postData.contents);
+    var messageText = data.message ? data.message.text : 'Có mẫu nén đến hạn';
+    
+    // 1. (Tùy chọn) Ghi vào Google Sheet
+    var sheet = SpreadsheetApp.getActiveSpreadsheet() ? SpreadsheetApp.getActiveSpreadsheet().getActiveSheet() : null;
+    if (sheet) {
+      sheet.appendRow([new Date(), data.event, data.urgent_count, messageText]);
+    }
+    
+    // 2. (Tùy chọn) Gửi Email tự động
+    // MailApp.sendEmail("thanhtgndt@gmail.com", "TASAGO - CẢNH BÁO NÉN MẪU", messageText);
+
+    return ContentService.createTextOutput(JSON.stringify({ status: "success", received: true }))
+      .setMimeType(ContentService.MimeType.JSON);
+  } catch (err) {
+    return ContentService.createTextOutput(JSON.stringify({ status: "error", error: err.toString() }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+}`;
+                        navigator.clipboard.writeText(scriptCode);
+                        alert('Đã sao chép mã nguồn Google Apps Script!');
+                      }}
+                      className="bg-emerald-700 hover:bg-emerald-600 text-white font-bold px-2.5 py-1 rounded text-[11px] cursor-pointer"
+                    >
+                      Copy Toàn Bộ Code Script
+                    </button>
+                  </div>
+                  <div className="bg-slate-900 text-emerald-300 p-3 rounded-lg font-mono text-[11px] overflow-x-auto border border-slate-800">
+                    <pre>{`function doPost(e) {
+  var data = JSON.parse(e.postData.contents);
+  var messageText = data.message ? data.message.text : 'Mẫu nén Tasago';
+  
+  // Xử lý chuyển tiếp tin nhắn hoặc ghi nhận lịch sử
+  Logger.log("Nhận mẫu nén: " + data.urgent_count);
+
+  return ContentService.createTextOutput(JSON.stringify({ status: "success" }))
+    .setMimeType(ContentService.MimeType.JSON);
+}`}</pre>
+                  </div>
+                </div>
               </div>
             </div>
 
-            {/* Option 2 */}
-            <div className="p-4 rounded-xl border border-slate-200 bg-white space-y-2.5 shadow-sm">
+            {/* Option 2: Make.com / n8n */}
+            <div className="p-4 rounded-xl border border-blue-200 bg-blue-50/40 space-y-2.5 shadow-sm">
               <div className="flex items-center space-x-2">
                 <span className="w-6 h-6 rounded-full bg-blue-600 text-white font-black text-xs flex items-center justify-center">2</span>
-                <h5 className="font-extrabold text-slate-900 text-xs uppercase">
-                  Cách 2: Sử Dụng Zalo Official Account (Zalo OA Doanh Nghiệp)
+                <h5 className="font-extrabold text-blue-950 text-xs uppercase">
+                  Cách 2: Dùng Make.com (Integromat) hoặc n8n (Kéo Thả Trực Quan Không Cần Code)
                 </h5>
               </div>
               <p className="text-slate-600 pl-8">
-                Dành cho tài khoản Zalo Doanh Nghiệp của <strong>Công Ty Cổ Phần Đầu Tư Tasago</strong>.
+                Tự động hóa đa kênh: Nhận Webhook từ Tasago $\rightarrow$ Bắn vào Zalo cá nhân, Nhóm Zalo, Telegram, và gửi SMS Brandname.
               </p>
-              <div className="pl-8 space-y-1.5 text-[11px] text-slate-600">
-                <p>1. Đăng ký trang Zalo OA tại <a href="https://oa.zalo.me" target="_blank" rel="noreferrer" className="text-blue-600 font-bold underline">oa.zalo.me</a>.</p>
-                <p>2. Đăng ký ứng dụng tại <a href="https://developers.zalo.me" target="_blank" rel="noreferrer" className="text-blue-600 font-bold underline">developers.zalo.me</a> và xin quyền gửi tin CS / Thông báo ZNS.</p>
-                <p>3. Lấy <strong>Access Token</strong> và điền vào ô <em>Bot Access Token</em> trong cài đặt.</p>
+              <div className="pl-8 space-y-1.5 text-[11px] text-slate-700">
+                <p>1. Đăng ký tài khoản miễn phí tại <a href="https://www.make.com" target="_blank" rel="noreferrer" className="text-blue-600 font-bold underline">Make.com</a>.</p>
+                <p>2. Tạo Scenario mới $\rightarrow$ Thêm Module đầu tiên là <strong>Webhooks (Custom Webhook)</strong>.</p>
+                <p>3. Copy đường link Webhook dạng <code>https://hook.eu2.make.com/...</code> dán vào ô <em>Zalo Webhook URL</em> ở Tasago.</p>
+                <p>4. Bấm <strong>"⚡ Bắn Thử Webhook"</strong> ở Tasago để Make.com tự động nhận diện cấu trúc (Data structure).</p>
+                <p>5. Nối thêm module <strong>Zalo OA / Telegram / Gmail</strong> để tự động gửi thông báo theo ý bạn.</p>
               </div>
             </div>
 
-            {/* Option 3 */}
-            <div className="p-4 rounded-xl border border-slate-200 bg-white space-y-2.5 shadow-sm">
+            {/* Option 3: Telegram Bot */}
+            <div className="p-4 rounded-xl border border-indigo-200 bg-indigo-50/40 space-y-2.5 shadow-sm">
               <div className="flex items-center space-x-2">
                 <span className="w-6 h-6 rounded-full bg-indigo-600 text-white font-black text-xs flex items-center justify-center">3</span>
-                <h5 className="font-extrabold text-slate-900 text-xs uppercase">
-                  Cách 3: Tích Hợp Thêm Bot Telegram (Giải Pháp 24/7 Không Giới Hạn)
+                <h5 className="font-extrabold text-indigo-950 text-xs uppercase">
+                  Cách 3: Bắn Thẳng Vào Nhóm Kỹ Thuật Qua Bot Telegram (Nhận Tin Ngay Lập Tức)
                 </h5>
               </div>
               <p className="text-slate-600 pl-8">
-                Nếu cần một kênh thông báo cực kỳ ổn định, nhận ngay tức khắc trên điện thoại:
+                Cách đơn giản nhất để test và nhận thông báo tức thì trên điện thoại KTV 24/7 mà không lo giới hạn chính sách Zalo.
               </p>
-              <div className="pl-8 space-y-1 text-[11px] text-slate-600">
-                <p>• Tạo Bot miễn phí qua <strong>@BotFather</strong> trên Telegram trong 30 giây.</p>
-                <p>• Nhập Webhook Telegram: <code>https://api.telegram.org/bot[TOKEN]/sendMessage?chat_id=[CHAT_ID]</code>.</p>
-                <p>• Bot sẽ tự động bắn thông báo vào nhóm Kỹ Thuật Tasago mỗi khi có mẫu đến hạn.</p>
+              <div className="pl-8 space-y-1.5 text-[11px] text-slate-700">
+                <p>• Nhập Webhook Telegram trực tiếp: <code>https://api.telegram.org/bot[TOKEN]/sendMessage?chat_id=[GROUP_ID]</code>.</p>
+                <p>• Mỗi khi có mẫu bê tông đến ngày nén, Bot sẽ phát toàn bộ danh sách công trình và SĐT giám sát vào nhóm.</p>
               </div>
             </div>
 
