@@ -406,11 +406,11 @@ export async function dispatchNotification(
   if (channel === 'email' || channel === 'both') {
     const recipients = config.emailRecipients.filter(r => r.trim().length > 0);
     const recipientsStr = recipients.join(', ') || 'kythuat@tasago.vn, thanhtgndt@gmail.com';
-    let emailStatus: 'success' | 'failed' | 'simulated' = 'success';
+    let emailStatus: 'success' | 'failed' | 'simulated' = 'failed';
     let emailError: string | undefined;
 
     try {
-      const response = await fetch('/api/notifications/send-email', {
+      const response = await fetch('/api/send-email', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -444,9 +444,9 @@ export async function dispatchNotification(
       }
     } catch (e: any) {
       console.warn('Email dispatch server call note:', e);
-      emailStatus = 'simulated';
-      emailError = `Bản tin email HTML đã tạo sẵn sàng gửi tới ${recipientsStr}`;
-      results.push('Email: Đã tạo bản tin');
+      emailStatus = 'failed';
+      emailError = e?.message || 'Không thể kết nối endpoint gửi email';
+      results.push(`Email: ${emailError}`);
     }
 
     const log = addNotificationLog({
