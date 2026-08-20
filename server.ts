@@ -47,7 +47,7 @@ async function startServer() {
         plainText,
         smtpConfig,
         emailServiceUrl
-      } = req.body;
+n      } = req.body;
 
       if (!recipients || !Array.isArray(recipients) || recipients.length === 0) {
         return res.status(400).json({
@@ -139,7 +139,9 @@ async function startServer() {
       const port = Number(smtpConfig?.smtpPort || process.env.SMTP_PORT || 587);
       const user = smtpConfig?.smtpUser || process.env.SMTP_USER;
       const pass = smtpConfig?.smtpPass || process.env.SMTP_PASS;
-      const secure = smtpConfig?.smtpSecure ?? (port === 465);
+      // Support SMTP_SECURE env var (true/false or '1'/'0') and fallback to port===465
+      const secureEnv = process.env.SMTP_SECURE;
+      const secure = smtpConfig?.smtpSecure ?? (typeof secureEnv !== 'undefined' ? (secureEnv === 'true' || secureEnv === '1') : (port === 465));
 
       if (host && user && pass) {
         const transporter = nodemailer.createTransport({
@@ -149,6 +151,24 @@ async function startServer() {
           auth: { user, pass },
           tls: { rejectUnauthorized: false }
         });
+
+        // Verify connection configuration early to provide clearer errors
+        try {
+          console.debug('SMTP verify attempt', { host, port, secure });
+          await transporter.verify();
+        } catch (verifyErr: any) {
+          console.error('SMTP verify failed', { host, port, secure, message: verifyErr?.message });
+          return res.status(502).json({
+            success: false,
+            message: 'Không thể kết nối máy chủ gửi email. Vui lòng kiểm tra lại cấu hình SMTP.',
+            error: verifyErr?.message,
+            info: {
+              host,
+              port,
+              secure
+            }
+          });
+        }
 
         const info = await transporter.sendMail({
           from: senderName,
@@ -172,7 +192,7 @@ async function startServer() {
       return res.status(200).json({
         success: true,
         channel: 'ready_mode',
-        message: `Đã đóng gói bản tin HTML hoàn chỉnh cho ${validRecipients.length} email (${validRecipients.join(', ')}). Để gửi trực tiếp qua hòm thư thật 24/7, bạn có thể điền thông tin SMTP hoặc URL Google Apps Script trong Cài Đặt.`,
+        message: `Đã đóng gói bản tin HTML hoàn chỉnh cho ${validRecipients.length} email (${validRecipients.join(', ')}). Để gửi trực tiếp qua hòm thư thật 24/7, bạn có[...]",
         recipients: validRecipients,
         previewSubject: emailSubject,
         recipientList: validRecipients
