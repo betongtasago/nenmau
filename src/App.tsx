@@ -74,6 +74,7 @@ export default function App() {
   const [notificationPreselectedSample, setNotificationPreselectedSample] = useState<ConcreteSample | null>(null);
 
   const [isUserManagementModalOpen, setIsUserManagementModalOpen] = useState(false);
+  const [userManagementTab, setUserManagementTab] = useState<'users' | 'stations'>('stations');
   const [isGitHubExportModalOpen, setIsGitHubExportModalOpen] = useState(false);
   const [showAutoAlertBanner, setShowAutoAlertBanner] = useState(true);
   const [browserNotificationGranted, setBrowserNotificationGranted] = useState(() => {
@@ -318,7 +319,10 @@ export default function App() {
         onLogout={handleLogout}
         onOpenAddModal={handleOpenAddForm}
         onOpenNotificationModal={() => handleOpenNotificationModal()}
-        onOpenUserManagement={() => setIsUserManagementModalOpen(true)}
+        onOpenUserManagement={(tab) => {
+          setUserManagementTab(tab || 'stations');
+          setIsUserManagementModalOpen(true);
+        }}
         onOpenExportBackup={() => setIsGitHubExportModalOpen(true)}
         urgentCount={urgentCount}
       />
@@ -532,8 +536,14 @@ export default function App() {
         onClose={() => setIsUserManagementModalOpen(false)}
         users={users}
         stations={stations}
+        samples={samples}
         onSaveUsers={handleSaveUsers}
         onSaveStations={handleSaveStations}
+        onSaveSamples={(updatedSamples) => {
+          setSamples(updatedSamples);
+          saveSamples(updatedSamples);
+        }}
+        initialTab={userManagementTab}
       />
 
       {/* 6. GitHub Export & JSON Backup Modal */}

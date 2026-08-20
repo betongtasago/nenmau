@@ -497,11 +497,11 @@ export const INITIAL_SAMPLES: ConcreteSample[] = [
 
 export const INITIAL_NOTIFICATION_CONFIG: NotificationConfig = {
   autoZaloEnabled: true,
-  zaloWebhookUrl: 'https://openapi.zalo.me/v2.0/oa/message/cs',
-  zaloBotToken: 'TSG_ZALO_BOT_TOKEN_2026',
-  zaloGroupId: 'zalo_group_tasago_concrete_lab',
+  zaloWebhookUrl: '',
+  zaloBotToken: '',
+  zaloGroupId: 'nhom_kythuat_tasago',
   autoEmailEnabled: true,
-  emailRecipients: ['kythuat@tasago.vn', 'dieuhanh@tasago.vn', 'thanhtgndt@gmail.com'],
+  emailRecipients: ['kythuat@tasago.vn', 'thanhtgndt@gmail.com'],
   emailSender: 'hethong-nenmau@tasago.vn',
   reminderDaysBefore: 0,
   autoSendHour: 7,

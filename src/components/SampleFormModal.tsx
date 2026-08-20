@@ -257,7 +257,7 @@ export const SampleFormModal: React.FC<SampleFormModalProps> = ({
                 >
                   {stations.map((s) => (
                     <option key={s.id} value={s.id}>
-                      {s.name} ({s.code})
+                      {s.name} ({s.code}) {s.active === false ? '— [Tạm Ngưng]' : ''}
                     </option>
                   ))}
                 </select>
