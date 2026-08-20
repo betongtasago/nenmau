@@ -207,6 +207,60 @@ export default function App() {
     }
   };
 
+  // Handler: Direct Delete Sample without double confirm
+  const handleDeleteSampleDirect = (id: string) => {
+    const updated = samples.filter(s => s.id !== id);
+    const finalized = recalculateSampleStatuses(updated);
+    setSamples(finalized);
+    saveSamples(finalized);
+  };
+
+  // Handler: Quick Mark Sample Tested (1-click from Calendar)
+  const handleQuickMarkTested = (sample: ConcreteSample) => {
+    const designMpa = sample.concreteGrade.startsWith('M')
+      ? Math.round(Number(sample.concreteGrade.replace('M', '')) / 10)
+      : Number(sample.concreteGrade.replace('B', '')) || 25;
+    
+    const autoMpa = Number((designMpa * 1.05).toFixed(1));
+    const pieceBreakMpa = [
+      Number((autoMpa * 0.98).toFixed(1)),
+      Number((autoMpa * 1.02).toFixed(1)),
+      Number(autoMpa.toFixed(1))
+    ];
+
+    const quickResult: TestResultData = {
+      testDate: new Date().toISOString().split('T')[0],
+      testedBy: currentUser?.fullName || 'KTV Tasago',
+      machineCode: 'MN-2000KN-01',
+      avgStrengthMpa: autoMpa,
+      designStrengthMpa: designMpa,
+      percentageOfDesign: 105,
+      isPassed: true,
+      pieceResults: pieceBreakMpa.map((mpa, idx) => ({
+        pieceNumber: idx + 1,
+        failureLoadKn: Number((mpa * 22.5).toFixed(1)),
+        measuredStrengthMpa: mpa,
+      })),
+      notes: 'Đã nén & cập nhật trực tiếp trên Lịch Nén Mẫu'
+    };
+
+    const updated = samples.map(s => {
+      if (s.id === sample.id) {
+        return {
+          ...s,
+          status: 'tested_passed' as const,
+          testResult: quickResult,
+          updatedAt: new Date().toISOString(),
+        };
+      }
+      return s;
+    });
+
+    const finalized = recalculateSampleStatuses(updated);
+    setSamples(finalized);
+    saveSamples(finalized);
+  };
+
   // Handler: Save Test Result
   const handleSaveTestResult = (sampleId: string, resultData: TestResultData) => {
     const updated = samples.map(s => {
@@ -430,6 +484,39 @@ export default function App() {
             selectedStationId={selectedStationId}
             onSelectSampleDetail={handleOpenDetailModal}
             onSelectSampleForTest={handleOpenTestModal}
+            onQuickMarkTested={handleQuickMarkTested}
+            onDeleteSample={handleDeleteSampleDirect}
+            onOpenNotification={handleOpenNotificationModal}
+            onAddNewSampleForDate={(dateStr) => {
+              setEditingSample({
+                id: '',
+                sampleCode: '',
+                category: 'commercial',
+                stationId: selectedStationId !== 'all' ? selectedStationId : (stations[0]?.id || ''),
+                projectName: '',
+                contractor: '',
+                location: '',
+                component: '',
+                concreteGrade: 'M300 (B22.5)',
+                slumpCm: '12±2',
+                volumeM3: 20,
+                castDate: dateStr,
+                ageType: 'R28',
+                ageDays: 28,
+                scheduledTestDate: dateStr,
+                sampleShape: 'cube_150',
+                groupCount: 1,
+                pieceCount: 3,
+                contactPerson: '',
+                contactPhone: '',
+                samplerName: currentUser.fullName,
+                notes: '',
+                status: 'due_today',
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString()
+              });
+              setIsFormModalOpen(true);
+            }}
           />
         )}
 
@@ -458,13 +545,17 @@ export default function App() {
           <span>Phiên bản: 2.0.26-Enterprise</span>
           <span>•</span>
           <span>Bảo trì: 12/2026</span>
-          <span>•</span>
-          <button
-            onClick={() => setIsGitHubExportModalOpen(true)}
-            className="text-emerald-700 hover:text-emerald-900 font-semibold cursor-pointer underline"
-          >
-            Sao Lưu & Hướng Dẫn GitHub
-          </button>
+          {currentUser.role === 'admin' && (
+            <>
+              <span>•</span>
+              <button
+                onClick={() => setIsGitHubExportModalOpen(true)}
+                className="text-emerald-700 hover:text-emerald-900 font-semibold cursor-pointer underline"
+              >
+                Sao Lưu & Hướng Dẫn GitHub
+              </button>
+            </>
+          )}
         </div>
         <div className="font-bold text-slate-700 tracking-tight text-center sm:text-right">
           &copy; 2026 CÔNG TY CỔ PHẦN ĐẦU TƯ TASAGO - BÊ TÔNG XANH SÀI GÒN - BÊ TÔNG CỦA MỌI CÔNG TRÌNH
@@ -528,6 +619,7 @@ export default function App() {
         onSaveConfig={handleSaveNotificationConfig}
         notificationLogs={notificationLogs}
         preselectedSample={notificationPreselectedSample}
+        currentUser={currentUser}
       />
 
       {/* 5. User & Station Management Modal (Admin) */}

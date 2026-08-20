@@ -207,16 +207,16 @@ export const Header: React.FC<HeaderProps> = ({
                         <Users className="w-4 h-4 text-teal-600" />
                         <span>Quản Lý KTV & Phân Quyền</span>
                       </button>
+
+                      <button
+                        onClick={onOpenExportBackup}
+                        className="w-full text-left px-4 py-2 font-medium text-slate-700 hover:bg-slate-50 flex items-center gap-2 cursor-pointer border-t border-slate-100"
+                      >
+                        <Download className="w-4 h-4 text-slate-600" />
+                        <span>Sao Lưu Dữ Liệu & GitHub</span>
+                      </button>
                     </>
                   )}
-
-                  <button
-                    onClick={onOpenExportBackup}
-                    className="w-full text-left px-4 py-2 font-medium text-slate-700 hover:bg-slate-50 flex items-center gap-2 cursor-pointer"
-                  >
-                    <Download className="w-4 h-4 text-slate-600" />
-                    <span>Sao Lưu Dữ Liệu & GitHub</span>
-                  </button>
 
                   <button
                     onClick={onLogout}
