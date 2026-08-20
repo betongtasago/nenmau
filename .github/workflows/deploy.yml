@@ -11,7 +11,7 @@ permissions:
   id-token: write
 
 concurrency:
-  group: "pages"
+  group: pages
   cancel-in-progress: true
 
 jobs:
@@ -30,13 +30,12 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: npm
 
       - name: Install Dependencies
         run: npm install --include=dev --legacy-peer-deps
 
       - name: Build Production Web App
-        run: npx vite build --base=./
+        run: npm run build
 
       - name: Create .nojekyll for GitHub Pages
         run: touch dist/.nojekyll
