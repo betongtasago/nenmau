@@ -16,10 +16,12 @@ concurrency:
 
 jobs:
   build-and-deploy:
+    runs-on: ubuntu-latest
+
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
-    runs-on: ubuntu-latest
+
     steps:
       - name: Checkout Source Code
         uses: actions/checkout@v4
@@ -28,27 +30,26 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
+          cache: npm
 
       - name: Install Dependencies
-        run: |
-          npm install --include=dev --legacy-peer-deps
+        run: npm install --include=dev --legacy-peer-deps
 
       - name: Build Production Web App
-        run: |
-          npx vite build --base=./
+        run: npx vite build --base=./
 
       - name: Create .nojekyll for GitHub Pages
-        run: |
-          mkdir -p dist
-          touch dist/.nojekyll
+        run: touch dist/.nojekyll
 
       - name: Setup Pages Configuration
         uses: actions/configure-pages@v5
+        with:
+          enablement: true
 
       - name: Upload Build Artifact
-        uses: actions/upload-pages-artifact@v3
+        uses: actions/upload-pages-artifact@v4
         with:
-          path: './dist'
+          path: "./dist"
 
       - name: Deploy to GitHub Pages
         id: deployment
