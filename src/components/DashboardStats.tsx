@@ -13,6 +13,7 @@ import {
   MessageSquare
 } from 'lucide-react';
 import { ConcreteSample, Station } from '../types';
+import { ViewMode } from '../utils/storage';
 
 interface DashboardStatsProps {
   samples: ConcreteSample[];
@@ -20,6 +21,7 @@ interface DashboardStatsProps {
   selectedStationId: string;
   onFilterStatus?: (status: string) => void;
   onOpenNotificationCenter?: () => void;
+  viewMode?: ViewMode;
 }
 
 export const DashboardStats: React.FC<DashboardStatsProps> = ({
@@ -28,6 +30,7 @@ export const DashboardStats: React.FC<DashboardStatsProps> = ({
   selectedStationId,
   onFilterStatus,
   onOpenNotificationCenter,
+  viewMode = 'auto',
 }) => {
   // Filter samples according to selected station
   const filteredSamples = selectedStationId === 'all'
@@ -36,7 +39,7 @@ export const DashboardStats: React.FC<DashboardStatsProps> = ({
 
   const selectedStationObj = stations.find(s => s.id === selectedStationId);
 
-  // Key metrics matching the Professional Polish archetype
+  // Key metrics
   const totalCount = filteredSamples.length;
   const dueTodayCount = filteredSamples.filter(s => s.status === 'due_today').length;
   const overdueCount = filteredSamples.filter(s => s.status === 'overdue').length;
@@ -45,26 +48,29 @@ export const DashboardStats: React.FC<DashboardStatsProps> = ({
   const testedCount = filteredSamples.filter(s => s.status === 'tested_passed' || s.status === 'tested_failed').length;
   const totalVolumeM3 = filteredSamples.reduce((acc, curr) => acc + (curr.volumeM3 || 0), 0);
 
+  const isMobileLayout = viewMode === 'mobile';
+
   return (
-    <div className="space-y-4">
-      {/* 4 Professional Polish KPI Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+    <div className="space-y-3 font-sans">
+      
+      {/* KPI Cards Grid - Responsive & Mobile-Optimized */}
+      <div className={`grid ${isMobileLayout ? 'grid-cols-2 gap-2' : 'grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4'}`}>
         
-        {/* Card 1: Tổng mẫu hôm nay */}
+        {/* Card 1: Tổng mẫu */}
         <div 
           onClick={() => onFilterStatus && onFilterStatus('all')}
-          className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm hover:border-emerald-300 transition-all cursor-pointer"
+          className="bg-white p-3.5 sm:p-4 rounded-xl border border-slate-200 shadow-xs hover:border-emerald-400 transition-all cursor-pointer"
         >
           <div className="flex items-center justify-between">
-            <p className="text-xs text-slate-500 font-medium uppercase tracking-wider">
+            <p className="text-[11px] sm:text-xs text-slate-500 font-semibold uppercase tracking-wider">
               Tổng Mẫu Đang Theo Dõi
             </p>
             <FlaskConical className="w-4 h-4 text-emerald-600" />
           </div>
-          <h3 className="text-2xl font-bold text-slate-800 mt-1">
+          <h3 className="text-xl sm:text-2xl font-black text-slate-800 mt-1">
             {totalCount}{' '}
-            <span className="text-sm font-normal text-emerald-600 ml-1">
-              Tổ mẫu ({totalVolumeM3.toLocaleString('vi-VN')} m³)
+            <span className="text-xs sm:text-sm font-semibold text-emerald-600 ml-0.5 sm:ml-1">
+              tổ ({totalVolumeM3.toLocaleString('vi-VN')} m³)
             </span>
           </h3>
         </div>
@@ -72,18 +78,18 @@ export const DashboardStats: React.FC<DashboardStatsProps> = ({
         {/* Card 2: Đến hạn R7 */}
         <div 
           onClick={() => onFilterStatus && onFilterStatus('r7')}
-          className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm border-l-4 border-l-orange-500 hover:shadow-md transition-all cursor-pointer"
+          className="bg-white p-3.5 sm:p-4 rounded-xl border border-slate-200 shadow-xs border-l-4 border-l-orange-500 hover:shadow-sm transition-all cursor-pointer"
         >
           <div className="flex items-center justify-between">
-            <p className="text-xs text-slate-500 font-medium uppercase tracking-wider">
+            <p className="text-[11px] sm:text-xs text-slate-500 font-semibold uppercase tracking-wider">
               Đang Chờ Nén R7
             </p>
             <Clock className="w-4 h-4 text-orange-500" />
           </div>
-          <h3 className="text-2xl font-bold text-orange-600 mt-1">
+          <h3 className="text-xl sm:text-2xl font-black text-orange-600 mt-1">
             {String(r7Count).padStart(2, '0')}{' '}
-            <span className="text-sm font-normal text-slate-400 ml-1">
-              Công trình
+            <span className="text-xs sm:text-sm font-normal text-slate-400 ml-1">
+              tổ mẫu
             </span>
           </h3>
         </div>
@@ -91,62 +97,59 @@ export const DashboardStats: React.FC<DashboardStatsProps> = ({
         {/* Card 3: Đến hạn R28 */}
         <div 
           onClick={() => onFilterStatus && onFilterStatus('r28')}
-          className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm border-l-4 border-l-blue-500 hover:shadow-md transition-all cursor-pointer"
+          className="bg-white p-3.5 sm:p-4 rounded-xl border border-slate-200 shadow-xs border-l-4 border-l-blue-500 hover:shadow-sm transition-all cursor-pointer"
         >
           <div className="flex items-center justify-between">
-            <p className="text-xs text-slate-500 font-medium uppercase tracking-wider">
+            <p className="text-[11px] sm:text-xs text-slate-500 font-semibold uppercase tracking-wider">
               Đang Chờ Nén R28
             </p>
             <Calendar className="w-4 h-4 text-blue-500" />
           </div>
-          <h3 className="text-2xl font-bold text-blue-600 mt-1">
+          <h3 className="text-xl sm:text-2xl font-black text-blue-600 mt-1">
             {String(r28Count).padStart(2, '0')}{' '}
-            <span className="text-sm font-normal text-slate-400 ml-1">
-              Công trình
+            <span className="text-xs sm:text-sm font-normal text-slate-400 ml-1">
+              tổ mẫu
             </span>
           </h3>
         </div>
 
-        {/* Card 4: Thông báo Zalo / Email */}
+        {/* Card 4: Cần xử lý ngay (Hôm nay + Quá hạn) */}
         <div 
-          onClick={onOpenNotificationCenter}
-          className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm hover:border-emerald-400 transition-all cursor-pointer"
+          onClick={() => onFilterStatus && onFilterStatus('urgent')}
+          className={`p-3.5 sm:p-4 rounded-xl border shadow-xs transition-all cursor-pointer ${
+            dueTodayCount + overdueCount > 0 
+              ? 'bg-red-50/70 border-red-200 hover:border-red-400' 
+              : 'bg-white border-slate-200'
+          }`}
         >
           <div className="flex items-center justify-between">
-            <p className="text-xs text-slate-500 font-medium uppercase tracking-wider">
-              Thông Báo Zalo / Bot
+            <p className="text-[11px] sm:text-xs text-slate-600 font-semibold uppercase tracking-wider">
+              Hôm Nay / Quá Hạn
             </p>
-            <MessageSquare className="w-4 h-4 text-emerald-500" />
+            <AlertTriangle className={`w-4 h-4 ${dueTodayCount + overdueCount > 0 ? 'text-red-600 animate-bounce' : 'text-slate-400'}`} />
           </div>
-          <h3 className="text-2xl font-bold text-emerald-600 mt-1">
-            {dueTodayCount + overdueCount > 0 ? (
-              <span className="text-red-600">{dueTodayCount + overdueCount} Cần gửi</span>
-            ) : (
-              <span>Đã gửi <span className="text-sm font-normal text-slate-400 ml-1">100%</span></span>
-            )}
+          <h3 className={`text-xl sm:text-2xl font-black mt-1 ${dueTodayCount + overdueCount > 0 ? 'text-red-600' : 'text-slate-800'}`}>
+            {dueTodayCount + overdueCount}{' '}
+            <span className="text-xs sm:text-sm font-semibold ml-1">
+              ({dueTodayCount} hôm nay / {overdueCount} quá hạn)
+            </span>
           </h3>
         </div>
 
       </div>
 
-      {/* Urgent Warning Alert Strip (if due today or overdue) */}
-      {(dueTodayCount > 0 || overdueCount > 0) && (
-        <div className="bg-amber-50/90 border border-amber-200 rounded-xl p-3.5 flex flex-wrap items-center justify-between gap-3 text-xs text-amber-900 font-medium">
+      {/* Selected Station Banner Info */}
+      {selectedStationObj && selectedStationId !== 'all' && (
+        <div className="bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-2 flex items-center justify-between text-xs text-emerald-900">
           <div className="flex items-center gap-2">
-            <span className="w-2.5 h-2.5 rounded-full bg-red-500 animate-ping" />
+            <Building2 className="w-4 h-4 text-emerald-700 shrink-0" />
             <span>
-              Cảnh báo lịch nén: Có <strong>{dueTodayCount} mẫu đến hạn hôm nay</strong> và <strong>{overdueCount} mẫu đã quá hạn</strong> chưa nén!
+              Đang lọc theo: <strong>{selectedStationObj.name}</strong> ({selectedStationObj.code}) • {selectedStationObj.address}
             </span>
           </div>
-          {onOpenNotificationCenter && (
-            <button
-              onClick={onOpenNotificationCenter}
-              className="bg-amber-600 hover:bg-amber-500 text-white font-bold px-3 py-1.5 rounded-lg text-xs flex items-center gap-1 shadow-xs transition-colors cursor-pointer"
-            >
-              <Send className="w-3.5 h-3.5" />
-              <span>Gửi Nhắc Zalo Ngay</span>
-            </button>
-          )}
+          <span className="font-mono font-bold text-emerald-800 hidden sm:inline">
+            Hotline trạm: {selectedStationObj.hotline || '0942.320.923'}
+          </span>
         </div>
       )}
     </div>

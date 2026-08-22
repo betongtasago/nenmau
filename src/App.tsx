@@ -20,7 +20,10 @@ import {
   saveNotificationConfig, 
   loadNotificationLogs,
   recalculateSampleStatuses,
-  parseDesignStrengthMpa
+  parseDesignStrengthMpa,
+  loadViewMode,
+  saveViewMode,
+  ViewMode
 } from './utils/storage';
 import { exportSamplesToExcel } from './utils/excelExport';
 import { 
@@ -28,7 +31,22 @@ import {
   requestBrowserNotificationPermission,
   playAlertChime 
 } from './utils/notificationService';
-import { AlertTriangle, Bell, MessageSquare, Volume2, X, Sparkles } from 'lucide-react';
+import { 
+  AlertTriangle, 
+  Bell, 
+  MessageSquare, 
+  Volume2, 
+  X, 
+  Sparkles,
+  Phone,
+  LayoutGrid,
+  CalendarDays,
+  Plus,
+  BarChart3,
+  FileText,
+  Smartphone,
+  Monitor
+} from 'lucide-react';
 
 // Components
 import { Header } from './components/Header';
@@ -56,7 +74,8 @@ export default function App() {
   const [notificationConfig, setNotificationConfig] = useState<NotificationConfig>(() => loadNotificationConfig());
   const [notificationLogs, setNotificationLogs] = useState<NotificationLog[]>(() => loadNotificationLogs());
 
-  // UI state
+  // UI state & ViewMode (Mobile / PC / Auto)
+  const [viewMode, setViewMode] = useState<ViewMode>(() => loadViewMode());
   const [selectedStationId, setSelectedStationId] = useState<string>('all');
   const [activeTab, setActiveTab] = useState<'samples' | 'calendar' | 'analytics' | 'reports'>('samples');
   
@@ -81,6 +100,11 @@ export default function App() {
     return typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted';
   });
 
+  const handleViewModeChange = (newMode: ViewMode) => {
+    setViewMode(newMode);
+    saveViewMode(newMode);
+  };
+
   // If user is station member, default filter to their station
   useEffect(() => {
     if (currentUser && currentUser.role === 'member' && currentUser.stationId) {
@@ -88,13 +112,13 @@ export default function App() {
     }
   }, [currentUser]);
 
-  // Recalculate status and trigger 100% automated notification check on mount & periodically
+  // Recalculate status and trigger automated notification check on mount & periodically
   useEffect(() => {
     const fresh = recalculateSampleStatuses(loadSamples());
     setSamples(fresh);
     saveSamples(fresh);
 
-    // Sync to backend server for 24/7 background 07:00 AM Cron
+    // Sync to backend server for background 07:00 AM Cron
     fetch('/api/server-sync', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -105,7 +129,7 @@ export default function App() {
       })
     }).catch(() => {});
 
-    // 100% Automated Background Notification Check (Triggers at 07:00 AM VN Time)
+    // Background Notification Check (Triggers at 07:00 AM VN Time)
     if (currentUser) {
       checkAndTriggerAutoNotifications(fresh, stations, notificationConfig).catch(console.error);
     }
@@ -171,7 +195,7 @@ export default function App() {
         id: `TSG-${Date.now().toString().slice(-6)}`,
         sampleCode: sampleData.sampleCode || `M-${Date.now().toString().slice(-4)}`,
         category: sampleData.category || 'commercial',
-        stationId: sampleData.stationId || stations[0]?.id || 'station_1',
+        stationId: sampleData.stationId || stations[0]?.id || 'station_hocmon',
         projectName: sampleData.projectName || '',
         contractor: sampleData.contractor || '',
         component: sampleData.component || '',
@@ -365,14 +389,16 @@ export default function App() {
 
   // If not logged in, show AuthScreen
   if (!currentUser) {
-    return <AuthScreen onLogin={handleLogin} onLoginSuccess={handleLogin} users={users} />;
+    return <AuthScreen onLogin={handleLogin} onSelectUser={handleLogin} users={users} />;
   }
 
   // Count urgent samples for notification badge
   const urgentCount = samples.filter(s => s.status === 'due_today' || s.status === 'overdue').length;
 
+  const isMobileLayout = viewMode === 'mobile';
+
   return (
-    <div className="min-h-screen bg-[#f8fafc] text-slate-900 flex flex-col font-sans selection:bg-emerald-600 selection:text-white">
+    <div className={`min-h-screen bg-[#f8fafc] text-slate-900 flex flex-col font-sans selection:bg-emerald-600 selection:text-white ${isMobileLayout ? 'pb-20' : ''}`}>
       {/* Header */}
       <Header
         currentUser={currentUser}
@@ -390,17 +416,21 @@ export default function App() {
         }}
         onOpenExportBackup={() => setIsGitHubExportModalOpen(true)}
         urgentCount={urgentCount}
+        viewMode={viewMode}
+        onToggleViewMode={handleViewModeChange}
       />
 
       {/* Main Container */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+      <main className={`flex-1 w-full mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-6 space-y-4 sm:space-y-6 ${
+        viewMode === 'mobile' ? 'max-w-2xl' : 'max-w-7xl'
+      }`}>
         
         {/* Automatic Realtime Urgent Alert Banner */}
         {urgentCount > 0 && showAutoAlertBanner && (
-          <div className="bg-gradient-to-r from-red-600 via-rose-600 to-amber-600 text-white p-4 sm:p-5 rounded-2xl shadow-xl shadow-red-600/20 border border-red-500/50 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 animate-in fade-in slide-in-from-top-4 duration-300">
-            <div className="flex items-start sm:items-center space-x-3.5">
-              <div className="w-11 h-11 rounded-xl bg-white/20 backdrop-blur-md flex items-center justify-center shrink-0 text-white animate-pulse">
-                <Bell className="w-6 h-6" />
+          <div className="bg-gradient-to-r from-red-600 via-rose-600 to-amber-600 text-white p-3.5 sm:p-5 rounded-2xl shadow-lg shadow-red-600/15 border border-red-500/40 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4 animate-in fade-in slide-in-from-top-4 duration-300">
+            <div className="flex items-start sm:items-center space-x-3">
+              <div className="w-10 h-10 rounded-xl bg-white/20 backdrop-blur-md flex items-center justify-center shrink-0 text-white animate-pulse">
+                <Bell className="w-5 h-5" />
               </div>
               <div>
                 <div className="flex items-center space-x-2">
@@ -411,25 +441,22 @@ export default function App() {
                     Thời gian thực
                   </span>
                 </div>
-                <h3 className="font-black text-sm sm:text-base text-white mt-0.5">
+                <h3 className="font-black text-xs sm:text-base text-white mt-0.5">
                   Phát hiện <span className="underline underline-offset-2">{urgentCount} mẫu bê tông</span> có lịch nén cần thực hiện ngay!
                 </h3>
-                <p className="text-xs text-red-100/90 hidden sm:block mt-0.5">
-                  Hệ thống đã tự động tính toán tiến độ. Đề nghị kiểm tra máy nén và liên hệ công trình để tiến hành nén mẫu.
-                </p>
               </div>
             </div>
 
-            <div className="flex flex-wrap items-center gap-2 w-full md:w-auto justify-end">
+            <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto justify-end">
               {!browserNotificationGranted && (
                 <button
                   type="button"
                   onClick={handleRequestPushPermission}
-                  className="bg-white/20 hover:bg-white/30 text-white font-bold px-3 py-2 rounded-xl text-xs flex items-center space-x-1.5 transition-all cursor-pointer backdrop-blur-sm"
+                  className="bg-white/20 hover:bg-white/30 text-white font-bold px-3 py-1.5 rounded-xl text-xs flex items-center space-x-1.5 transition-all cursor-pointer backdrop-blur-sm"
                   title="Bật thông báo đẩy lên màn hình điện thoại/máy tính"
                 >
                   <Sparkles className="w-3.5 h-3.5 text-amber-300" />
-                  <span>Bật Push Thông Báo</span>
+                  <span>Bật Push</span>
                 </button>
               )}
 
@@ -439,16 +466,16 @@ export default function App() {
                   playAlertChime();
                   handleOpenNotificationModal();
                 }}
-                className="bg-white text-red-700 hover:bg-red-50 font-black px-4 py-2 rounded-xl text-xs flex items-center space-x-1.5 shadow-md transition-all active:scale-95 cursor-pointer"
+                className="bg-white text-red-700 hover:bg-red-50 font-black px-3.5 py-1.5 rounded-xl text-xs flex items-center space-x-1.5 shadow-md transition-all active:scale-95 cursor-pointer"
               >
                 <MessageSquare className="w-3.5 h-3.5" />
-                <span>Xem & Bắn Tin Bot Zalo</span>
+                <span>Xem Thông Báo</span>
               </button>
 
               <button
                 type="button"
                 onClick={() => setShowAutoAlertBanner(false)}
-                className="text-white/70 hover:text-white p-1.5 rounded-lg hover:bg-white/10 transition-colors cursor-pointer"
+                className="text-white/70 hover:text-white p-1 rounded-lg hover:bg-white/10 transition-colors cursor-pointer"
                 title="Tạm ẩn cảnh báo"
               >
                 <X className="w-4 h-4" />
@@ -466,9 +493,10 @@ export default function App() {
             setActiveTab('samples');
           }}
           onOpenNotificationCenter={() => handleOpenNotificationModal()}
+          viewMode={viewMode}
         />
 
-        {/* Tab 1: SAMPLES TABLE */}
+        {/* Tab 1: SAMPLES TABLE / CARDS */}
         {activeTab === 'samples' && (
           <SampleList
             samples={samples}
@@ -484,6 +512,7 @@ export default function App() {
               exportSamplesToExcel(listToExport || samples, stations);
             }}
             userRole={currentUser.role}
+            viewMode={viewMode}
           />
         )}
 
@@ -550,12 +579,81 @@ export default function App() {
 
       </main>
 
-      {/* Footer - Professional Polish Theme */}
-      <footer className="bg-slate-100 px-6 py-2.5 border-t border-slate-200 flex flex-col sm:flex-row justify-between items-center text-[11px] text-slate-500 gap-2 mt-auto">
-        <div className="flex items-center gap-4">
-          <span>Phiên bản: 2.0.26-Enterprise</span>
+      {/* Fixed Bottom Navigation Bar for Mobile (Always visible in Mobile mode or on small screens) */}
+      <div className={`fixed bottom-0 left-0 right-0 z-40 bg-slate-900/95 backdrop-blur-md border-t border-slate-700 px-2 py-1.5 text-slate-300 shadow-2xl ${
+        viewMode === 'pc' ? 'hidden' : 'md:hidden'
+      }`}>
+        <div className="flex items-center justify-around max-w-lg mx-auto">
+          
+          <button
+            type="button"
+            onClick={() => setActiveTab('samples')}
+            className={`flex flex-col items-center py-1 px-2 rounded-lg text-[10px] font-semibold transition-colors cursor-pointer ${
+              activeTab === 'samples' ? 'text-emerald-400 bg-slate-800' : 'hover:text-slate-100'
+            }`}
+          >
+            <LayoutGrid className="w-5 h-5 mb-0.5" />
+            <span>Mẫu Nén</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab('calendar')}
+            className={`flex flex-col items-center py-1 px-2 rounded-lg text-[10px] font-semibold transition-colors cursor-pointer ${
+              activeTab === 'calendar' ? 'text-emerald-400 bg-slate-800' : 'hover:text-slate-100'
+            }`}
+          >
+            <CalendarDays className="w-5 h-5 mb-0.5" />
+            <span>Lịch Nén</span>
+          </button>
+
+          {/* Floating Center Action Button */}
+          <button
+            type="button"
+            onClick={handleOpenAddForm}
+            className="flex flex-col items-center justify-center -mt-5 w-12 h-12 rounded-full bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black shadow-lg shadow-emerald-500/30 border-2 border-slate-900 transition-transform active:scale-90 cursor-pointer"
+            title="Thêm mẫu mới"
+          >
+            <Plus className="w-6 h-6 stroke-[3]" />
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab('analytics')}
+            className={`flex flex-col items-center py-1 px-2 rounded-lg text-[10px] font-semibold transition-colors cursor-pointer ${
+              activeTab === 'analytics' ? 'text-emerald-400 bg-slate-800' : 'hover:text-slate-100'
+            }`}
+          >
+            <BarChart3 className="w-5 h-5 mb-0.5" />
+            <span>Thống Kê</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab('reports')}
+            className={`flex flex-col items-center py-1 px-2 rounded-lg text-[10px] font-semibold transition-colors cursor-pointer ${
+              activeTab === 'reports' ? 'text-emerald-400 bg-slate-800' : 'hover:text-slate-100'
+            }`}
+          >
+            <FileText className="w-5 h-5 mb-0.5" />
+            <span>Báo Cáo</span>
+          </button>
+
+        </div>
+      </div>
+
+      {/* Footer with updated Technical Support Phone 0942320923 */}
+      <footer className="bg-slate-100 px-4 sm:px-6 py-3 border-t border-slate-200 flex flex-col sm:flex-row justify-between items-center text-[11px] text-slate-500 gap-2 mt-auto">
+        <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2 sm:gap-4">
+          <span>Phiên bản: 2.0.26</span>
           <span>•</span>
-          <span>Bảo trì: 12/2026</span>
+          <a 
+            href="tel:0942320923" 
+            className="text-emerald-700 hover:text-emerald-900 font-bold flex items-center gap-1 hover:underline"
+          >
+            <Phone className="w-3 h-3" />
+            <span>Hỗ trợ kỹ thuật: 0942320923 (0942.320.923)</span>
+          </a>
           {currentUser.role === 'admin' && (
             <>
               <span>•</span>
@@ -563,13 +661,13 @@ export default function App() {
                 onClick={() => setIsGitHubExportModalOpen(true)}
                 className="text-emerald-700 hover:text-emerald-900 font-semibold cursor-pointer underline"
               >
-                Sao Lưu & Hướng Dẫn GitHub
+                Sao Lưu & GitHub
               </button>
             </>
           )}
         </div>
         <div className="font-bold text-slate-700 tracking-tight text-center sm:text-right">
-          &copy; 2026 CÔNG TY CỔ PHẦN ĐẦU TƯ TASAGO - BÊ TÔNG XANH SÀI GÒN - BÊ TÔNG CỦA MỌI CÔNG TRÌNH
+          &copy; {new Date().getFullYear()} CÔNG TY CỔ PHẦN ĐẦU TƯ TASAGO - BÊ TÔNG XANH SÀI GÒN
         </div>
       </footer>
 

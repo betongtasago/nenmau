@@ -17,9 +17,16 @@ import {
   Menu,
   X,
   Settings,
-  Plus
+  Plus,
+  Phone,
+  Monitor,
+  Smartphone,
+  LayoutGrid,
+  HelpCircle,
+  ExternalLink
 } from 'lucide-react';
 import { User, Station } from '../types';
+import { ViewMode } from '../utils/storage';
 
 interface HeaderProps {
   currentUser: User | null;
@@ -34,6 +41,8 @@ interface HeaderProps {
   onOpenUserManagement: (tab?: 'users' | 'stations') => void;
   onOpenExportBackup: () => void;
   urgentCount: number;
+  viewMode: ViewMode;
+  onChangeViewMode: (mode: ViewMode) => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -49,6 +58,8 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenUserManagement,
   onOpenExportBackup,
   urgentCount,
+  viewMode,
+  onChangeViewMode,
 }) => {
   const [userDropdownOpen, setUserDropdownOpen] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -69,28 +80,96 @@ export const Header: React.FC<HeaderProps> = ({
   };
 
   return (
-    <div className="w-full font-sans sticky top-0 z-40">
-      {/* Primary Top Nav - Professional Polish Emerald Bar */}
-      <nav className="bg-emerald-800 text-white px-4 sm:px-6 py-3 flex justify-between items-center shadow-md">
+    <header className="w-full font-sans sticky top-0 z-40 shadow-md">
+      {/* Top Banner - Hotline & Support Bar */}
+      <div className="bg-emerald-950 text-emerald-300 px-4 sm:px-6 py-1 text-[11px] flex justify-between items-center border-b border-emerald-900/60">
+        <div className="flex items-center gap-3">
+          <span className="font-semibold text-emerald-200 hidden sm:inline">
+            CÔNG TY CỔ PHẦN ĐẦU TƯ TASAGO
+          </span>
+          <span className="hidden sm:inline text-emerald-700">•</span>
+          <a 
+            href="tel:0942320923" 
+            className="flex items-center gap-1 text-emerald-300 hover:text-white transition-colors font-bold bg-emerald-900/60 px-2 py-0.5 rounded"
+            title="Gọi trực tiếp bộ phận kỹ thuật Tasago"
+          >
+            <Phone className="w-3 h-3 text-emerald-400" />
+            <span>Hỗ trợ kỹ thuật: 0942.320.923</span>
+          </a>
+        </div>
+
+        {/* View Mode Quick Switcher (PC / Mobile / Auto) */}
+        <div className="flex items-center gap-1.5">
+          <span className="text-emerald-400 text-[10px] uppercase font-bold hidden md:inline">
+            Giao diện:
+          </span>
+          <div className="inline-flex bg-emerald-900/80 p-0.5 rounded-md border border-emerald-800 text-[11px]">
+            <button
+              onClick={() => onChangeViewMode('auto')}
+              title="Chế độ Tự động thích ứng"
+              className={`px-2 py-0.5 rounded flex items-center gap-1 font-semibold transition-all cursor-pointer ${
+                viewMode === 'auto'
+                  ? 'bg-emerald-600 text-white shadow-xs font-bold'
+                  : 'text-emerald-300 hover:text-white'
+              }`}
+            >
+              <LayoutGrid className="w-3 h-3" />
+              <span className="hidden sm:inline">Tự Động</span>
+            </button>
+            <button
+              onClick={() => onChangeViewMode('pc')}
+              title="Chế độ Máy tính (PC / Desktop)"
+              className={`px-2 py-0.5 rounded flex items-center gap-1 font-semibold transition-all cursor-pointer ${
+                viewMode === 'pc'
+                  ? 'bg-emerald-600 text-white shadow-xs font-bold'
+                  : 'text-emerald-300 hover:text-white'
+              }`}
+            >
+              <Monitor className="w-3 h-3" />
+              <span>PC</span>
+            </button>
+            <button
+              onClick={() => onChangeViewMode('mobile')}
+              title="Chế độ Điện thoại (Mobile View)"
+              className={`px-2 py-0.5 rounded flex items-center gap-1 font-semibold transition-all cursor-pointer ${
+                viewMode === 'mobile'
+                  ? 'bg-emerald-600 text-white shadow-xs font-bold'
+                  : 'text-emerald-300 hover:text-white'
+              }`}
+            >
+              <Smartphone className="w-3 h-3" />
+              <span>Mobile</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Primary Top Nav - Professional Emerald Bar */}
+      <nav className="bg-emerald-800 text-white px-4 sm:px-6 py-2.5 flex justify-between items-center">
         
         {/* Brand & Logo */}
         <div 
-          className="flex items-center gap-3 cursor-pointer" 
+          className="flex items-center gap-3 cursor-pointer select-none" 
           onClick={() => onChangeTab('samples')}
         >
-          <div className="w-10 h-10 bg-white rounded-lg flex items-center justify-center shadow-sm">
-            <span className="text-emerald-800 font-black text-xl tracking-tight">TSG</span>
+          <div className="w-9 h-9 sm:w-10 sm:h-10 bg-white rounded-lg flex items-center justify-center shadow-sm shrink-0">
+            <span className="text-emerald-800 font-black text-lg sm:text-xl tracking-tight">TSG</span>
           </div>
           <div>
-            <h1 className="text-lg font-bold leading-none tracking-tight text-white">TASAGO</h1>
+            <h1 className="text-base sm:text-lg font-bold leading-none tracking-tight text-white flex items-center gap-2">
+              <span>TASAGO</span>
+              <span className="text-[10px] bg-emerald-700/90 text-emerald-200 px-1.5 py-0.5 rounded font-mono hidden sm:inline">
+                2026
+              </span>
+            </h1>
             <p className="text-[10px] uppercase tracking-widest text-emerald-200 opacity-90 font-medium mt-0.5">
-              Hệ Thống Quản Lý Nén Mẫu
+              Quản Lý Nén Mẫu Bê Tông
             </p>
           </div>
         </div>
 
         {/* Desktop Main Navigation Tabs */}
-        <div className="hidden md:flex gap-6 text-sm font-medium">
+        <div className="hidden md:flex gap-5 text-sm font-medium">
           {navItems.map((item) => {
             const isActive = activeTab === item.id;
             return (
@@ -100,7 +179,7 @@ export const Header: React.FC<HeaderProps> = ({
                 className={`transition-all pb-1 flex items-center gap-1.5 cursor-pointer ${
                   isActive 
                     ? 'border-b-2 border-white text-white font-bold' 
-                    : 'text-emerald-100 opacity-75 hover:opacity-100'
+                    : 'text-emerald-100 opacity-75 hover:opacity-100 hover:text-white'
                 }`}
               >
                 <item.icon className="w-4 h-4" />
@@ -111,9 +190,9 @@ export const Header: React.FC<HeaderProps> = ({
         </div>
 
         {/* User Info & Actions */}
-        <div className="flex items-center gap-2.5 sm:gap-3 text-sm">
+        <div className="flex items-center gap-2 sm:gap-3 text-sm">
           
-          {/* Notification Button */}
+          {/* Notification Alert Button */}
           <button
             onClick={onOpenNotificationModal}
             className={`relative p-2 rounded-lg transition-all flex items-center gap-1.5 cursor-pointer ${
@@ -131,13 +210,13 @@ export const Header: React.FC<HeaderProps> = ({
             )}
           </button>
 
-          {/* Admin Quick Action Buttons (if admin) */}
+          {/* Admin Station & User Management Shortcut */}
           {currentUser?.role === 'admin' && (
             <div className="hidden lg:flex items-center space-x-1.5">
               <button
                 onClick={() => onOpenUserManagement('stations')}
                 className="bg-emerald-700 hover:bg-emerald-600 text-emerald-100 px-2.5 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 cursor-pointer border border-emerald-600/60 shadow-xs"
-                title="Thêm, sửa, xóa danh mục trạm trộn bê tông"
+                title="Quản lý danh sách trạm trộn bê tông Tasago"
               >
                 <Building2 className="w-3.5 h-3.5 text-emerald-300" />
                 <span>Quản Lý Trạm</span>
@@ -146,7 +225,7 @@ export const Header: React.FC<HeaderProps> = ({
               <button
                 onClick={() => onOpenUserManagement('users')}
                 className="bg-emerald-700/70 hover:bg-emerald-600 text-emerald-100 px-2.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 cursor-pointer border border-emerald-600/40"
-                title="Quản trị thành viên & tài khoản KTV"
+                title="Quản trị thành viên & KTV trạm"
               >
                 <Users className="w-3.5 h-3.5" />
                 <span>Tài Khoản</span>
@@ -186,8 +265,15 @@ export const Header: React.FC<HeaderProps> = ({
                     <span className={`inline-block mt-1 text-[10px] px-2 py-0.5 rounded-full font-bold ${
                       currentUser.role === 'admin' ? 'bg-purple-100 text-purple-800' : 'bg-emerald-100 text-emerald-800'
                     }`}>
-                      {currentUser.role === 'admin' ? 'Quản Trị Viên (Admin)' : 'Thành Viên Kỹ Thuật'}
+                      {currentUser.role === 'admin' ? 'Quản Trị Viên (Admin)' : 'KTV Trạm'}
                     </span>
+                  </div>
+
+                  <div className="px-4 py-2 bg-slate-50 text-[11px] text-slate-600 border-b border-slate-100">
+                    <p className="font-semibold text-slate-700 flex items-center gap-1">
+                      <Phone className="w-3 h-3 text-emerald-600" />
+                      <span>Hotline: 0942.320.923</span>
+                    </p>
                   </div>
 
                   {currentUser.role === 'admin' && (
@@ -213,7 +299,7 @@ export const Header: React.FC<HeaderProps> = ({
                         className="w-full text-left px-4 py-2 font-medium text-slate-700 hover:bg-slate-50 flex items-center gap-2 cursor-pointer border-t border-slate-100"
                       >
                         <Download className="w-4 h-4 text-slate-600" />
-                        <span>Sao Lưu Dữ Liệu & GitHub</span>
+                        <span>Sao Lưu Dữ Liệu & Hướng Dẫn</span>
                       </button>
                     </>
                   )}
@@ -241,12 +327,12 @@ export const Header: React.FC<HeaderProps> = ({
       </nav>
 
       {/* Sub-header / Quick Action & Filter Ribbon */}
-      <div className="bg-white border-b border-slate-200 px-4 sm:px-6 py-2.5 flex flex-wrap justify-between items-center gap-3">
+      <div className="bg-white border-b border-slate-200 px-4 sm:px-6 py-2 flex flex-wrap justify-between items-center gap-2.5">
         <div className="flex flex-wrap items-center gap-2">
           <button
             id="subnav-add-sample-btn"
             onClick={onOpenAddModal}
-            className="bg-emerald-50 text-emerald-700 hover:bg-emerald-100 px-3.5 py-1.5 rounded-lg border border-emerald-200 text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer shadow-xs"
+            className="bg-emerald-600 hover:bg-emerald-700 text-white px-3.5 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer shadow-xs"
           >
             <PlusCircle className="w-4 h-4" />
             <span>+ Nhập Mẫu Mới</span>
@@ -255,7 +341,7 @@ export const Header: React.FC<HeaderProps> = ({
           <button
             id="subnav-export-report-btn"
             onClick={() => onChangeTab('reports')}
-            className="bg-slate-100 text-slate-700 hover:bg-slate-200 px-3.5 py-1.5 rounded-lg border border-slate-200 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
+            className="bg-slate-100 text-slate-700 hover:bg-slate-200 px-3.5 py-1.5 rounded-lg border border-slate-200 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer hidden sm:flex"
           >
             <FileSpreadsheet className="w-4 h-4 text-slate-600" />
             <span>Xuất Báo Cáo</span>
@@ -266,7 +352,8 @@ export const Header: React.FC<HeaderProps> = ({
             className="bg-slate-100 text-slate-700 hover:bg-slate-200 px-3 py-1.5 rounded-lg border border-slate-200 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
           >
             <Send className="w-3.5 h-3.5 text-blue-600" />
-            <span>Zalo Bot & Email</span>
+            <span className="hidden sm:inline">Zalo Bot & Email</span>
+            <span className="sm:hidden">Thông Báo</span>
           </button>
 
           {currentUser?.role === 'admin' && (
@@ -275,23 +362,23 @@ export const Header: React.FC<HeaderProps> = ({
               className="bg-teal-50 hover:bg-teal-100 text-teal-800 px-3 py-1.5 rounded-lg border border-teal-200 text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer sm:hidden"
             >
               <Building2 className="w-3.5 h-3.5 text-teal-600" />
-              <span>Quản Lý Trạm</span>
+              <span>Trạm Trộn</span>
             </button>
           )}
         </div>
 
         {/* Station Filter Dropdown */}
-        <div className="flex items-center gap-2 sm:gap-3">
-          <label className="text-xs font-bold text-slate-500 uppercase whitespace-nowrap">
-            Lọc theo trạm:
+        <div className="flex items-center gap-2">
+          <label className="text-xs font-bold text-slate-500 uppercase whitespace-nowrap hidden sm:inline">
+            Trạm:
           </label>
           <select
             id="station-selector-dropdown"
             value={selectedStationId}
             onChange={(e) => handleStationSelectChange(e.target.value)}
-            className="bg-slate-50 border border-slate-300 rounded-lg px-3 py-1.5 text-xs font-bold text-slate-800 outline-none focus:ring-2 focus:ring-emerald-500 cursor-pointer"
+            className="bg-slate-50 border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs font-bold text-slate-800 outline-none focus:ring-2 focus:ring-emerald-500 cursor-pointer max-w-[210px] sm:max-w-[260px] truncate"
           >
-            <option value="all">🏢 Tất cả các trạm ({stations.length} trạm)</option>
+            <option value="all">🏢 Tất cả các trạm ({stations.length})</option>
             {stations.map(station => (
               <option key={station.id} value={station.id}>
                 {station.name} ({station.code}) {station.active === false ? ' [Tạm ngưng]' : ''}
@@ -299,7 +386,7 @@ export const Header: React.FC<HeaderProps> = ({
             ))}
             {currentUser?.role === 'admin' && (
               <option value="__manage_stations__" className="text-emerald-700 font-bold bg-emerald-50">
-                ⚙️ + Thêm / Quản lý trạm trộn...
+                ⚙️ + Quản lý / Thêm trạm...
               </option>
             )}
           </select>
@@ -308,7 +395,7 @@ export const Header: React.FC<HeaderProps> = ({
 
       {/* Mobile Drawer Menu */}
       {mobileMenuOpen && (
-        <div className="md:hidden bg-emerald-900 text-white p-4 space-y-3 border-b border-emerald-950 animate-in slide-in-from-top duration-150">
+        <div className="md:hidden bg-emerald-900 text-white p-4 space-y-3 border-b border-emerald-950 animate-in slide-in-from-top duration-150 shadow-2xl">
           <div className="grid grid-cols-2 gap-2">
             {navItems.map((item) => (
               <button
@@ -325,6 +412,46 @@ export const Header: React.FC<HeaderProps> = ({
                 <span>{item.label}</span>
               </button>
             ))}
+          </div>
+
+          {/* View Mode inside Mobile Drawer */}
+          <div className="bg-emerald-950/80 p-3 rounded-xl border border-emerald-800">
+            <div className="text-xs font-semibold text-emerald-300 mb-2 flex items-center justify-between">
+              <span>Chế độ hiển thị giao diện:</span>
+              <span className="text-[10px] text-emerald-400 font-bold uppercase">{viewMode}</span>
+            </div>
+            <div className="grid grid-cols-3 gap-1 text-xs">
+              <button
+                onClick={() => onChangeViewMode('auto')}
+                className={`p-2 rounded-lg font-bold text-center ${viewMode === 'auto' ? 'bg-emerald-600 text-white' : 'bg-emerald-900 text-emerald-200'}`}
+              >
+                Tự Động
+              </button>
+              <button
+                onClick={() => onChangeViewMode('pc')}
+                className={`p-2 rounded-lg font-bold text-center ${viewMode === 'pc' ? 'bg-emerald-600 text-white' : 'bg-emerald-900 text-emerald-200'}`}
+              >
+                PC
+              </button>
+              <button
+                onClick={() => onChangeViewMode('mobile')}
+                className={`p-2 rounded-lg font-bold text-center ${viewMode === 'mobile' ? 'bg-emerald-600 text-white' : 'bg-emerald-900 text-emerald-200'}`}
+              >
+                Mobile
+              </button>
+            </div>
+          </div>
+
+          {/* Support Phone in Mobile Drawer */}
+          <div className="bg-emerald-800/80 p-2.5 rounded-xl flex items-center justify-between text-xs">
+            <span className="text-emerald-200">Hỗ trợ kỹ thuật 24/7:</span>
+            <a 
+              href="tel:0942320923" 
+              className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-2.5 py-1 rounded-lg flex items-center gap-1"
+            >
+              <Phone className="w-3.5 h-3.5" />
+              <span>0942.320.923</span>
+            </a>
           </div>
 
           {currentUser?.role === 'admin' && (
@@ -355,13 +482,13 @@ export const Header: React.FC<HeaderProps> = ({
 
           <div className="pt-2 border-t border-emerald-800 flex items-center justify-between text-xs">
             <span>Đang đăng nhập: <strong>{currentUser?.fullName}</strong></span>
-            <button onClick={onLogout} className="text-red-300 font-bold flex items-center gap-1">
+            <button onClick={onLogout} className="text-red-300 font-bold flex items-center gap-1 cursor-pointer">
               <LogOut className="w-3.5 h-3.5" />
               <span>Đăng xuất</span>
             </button>
           </div>
         </div>
       )}
-    </div>
+    </header>
   );
 };

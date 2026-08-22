@@ -2,13 +2,34 @@ import { User, Station, ConcreteSample, NotificationConfig, NotificationLog, Con
 import { INITIAL_USERS, INITIAL_STATIONS, INITIAL_SAMPLES, INITIAL_NOTIFICATION_CONFIG } from '../data/initialData';
 
 const STORAGE_KEYS = {
-  USERS: 'tasago_users_v2',
-  CURRENT_USER: 'tasago_current_user_v2',
-  STATIONS: 'tasago_stations_v2',
-  SAMPLES: 'tasago_samples_v2',
-  NOTIFICATION_CONFIG: 'tasago_notif_config_v2',
-  NOTIFICATION_LOGS: 'tasago_notif_logs_v2',
+  USERS: 'tasago_users_v4',
+  CURRENT_USER: 'tasago_current_user_v4',
+  STATIONS: 'tasago_stations_v3',
+  SAMPLES: 'tasago_samples_v3',
+  NOTIFICATION_CONFIG: 'tasago_notif_config_v3',
+  NOTIFICATION_LOGS: 'tasago_notif_logs_v3',
+  VIEW_MODE: 'tasago_view_mode_v3',
 };
+
+export type ViewMode = 'auto' | 'pc' | 'mobile';
+
+export function loadViewMode(): ViewMode {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEYS.VIEW_MODE);
+    if (raw === 'pc' || raw === 'mobile' || raw === 'auto') return raw;
+    return 'auto';
+  } catch {
+    return 'auto';
+  }
+}
+
+export function saveViewMode(mode: ViewMode): void {
+  try {
+    localStorage.setItem(STORAGE_KEYS.VIEW_MODE, mode);
+  } catch (e) {
+    console.error('Failed to save view mode:', e);
+  }
+}
 
 // Calculate age days from AgeType
 export function getDaysFromAgeType(ageType: ConcreteAgeType, customDays?: number): number {
@@ -46,7 +67,6 @@ export function parseDesignStrengthMpa(gradeStr: string): number {
   const mMatch = gradeStr.match(/M\s*(\d+)/i);
   if (mMatch && mMatch[1]) {
     const val = parseInt(mMatch[1], 10);
-    // M200 is 20 MPa (200 daN/cm2), M300 is 30 MPa, M350 is 35 MPa
     return val >= 100 ? val / 10 : val;
   }
   const bMatch = gradeStr.match(/B\s*(\d+(?:\.\d+)?)/i);
@@ -94,7 +114,17 @@ export function getStoredUsers(): User[] {
       localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(INITIAL_USERS));
       return INITIAL_USERS;
     }
-    return JSON.parse(raw);
+    const parsed: User[] = JSON.parse(raw);
+    // Filter out obsolete hardcoded dummy accounts
+    const filtered = parsed.filter(u => 
+      u.username === 'admin' || 
+      (u.id !== 'usr_hocmon' && u.id !== 'usr_xuyena' && u.id !== 'usr_hoaan' && u.id !== 'usr_tnt1' && u.id !== 'usr_tnt2' && u.id !== 'usr_lab')
+    );
+    if (filtered.length === 0 || !filtered.some(u => u.username === 'admin')) {
+      localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(INITIAL_USERS));
+      return INITIAL_USERS;
+    }
+    return filtered;
   } catch (e) {
     console.error('Failed to parse stored users:', e);
     return INITIAL_USERS;
@@ -112,10 +142,13 @@ export const saveUsers = saveStoredUsers;
 export function getCurrentUser(): User | null {
   try {
     const raw = localStorage.getItem(STORAGE_KEYS.CURRENT_USER);
-    if (!raw) return null;
+    if (!raw) {
+      // Default to admin for immediate convenience if not logged in
+      return INITIAL_USERS[0];
+    }
     return JSON.parse(raw);
   } catch {
-    return null;
+    return INITIAL_USERS[0];
   }
 }
 
@@ -134,7 +167,13 @@ export function getStoredStations(): Station[] {
       localStorage.setItem(STORAGE_KEYS.STATIONS, JSON.stringify(INITIAL_STATIONS));
       return INITIAL_STATIONS;
     }
-    return JSON.parse(raw);
+    const parsed: Station[] = JSON.parse(raw);
+    // Check if old obsolete stations like sta_hiepphuoc or sta_binhduong exist -> replace with new
+    if (parsed.some(s => s.id === 'sta_hiepphuoc' || s.id === 'sta_binhduong' || s.id === 'sta_longan')) {
+      localStorage.setItem(STORAGE_KEYS.STATIONS, JSON.stringify(INITIAL_STATIONS));
+      return INITIAL_STATIONS;
+    }
+    return parsed;
   } catch (e) {
     console.error('Failed to parse stored stations:', e);
     return INITIAL_STATIONS;
@@ -158,6 +197,11 @@ export function getStoredSamples(): ConcreteSample[] {
       localStorage.setItem(STORAGE_KEYS.SAMPLES, JSON.stringify(samples));
     } else {
       samples = JSON.parse(raw);
+      // If samples still reference obsolete station sta_hiepphuoc -> reset to initial new samples
+      if (samples.some(s => s.stationId === 'sta_hiepphuoc' || s.stationId === 'sta_binhduong')) {
+        samples = INITIAL_SAMPLES;
+        localStorage.setItem(STORAGE_KEYS.SAMPLES, JSON.stringify(samples));
+      }
     }
     // Update statuses dynamically relative to current date
     const updated = samples.map(refreshSampleStatus);
@@ -220,7 +264,7 @@ export function addNotificationLog(log: Omit<NotificationLog, 'id' | 'timestamp'
     id: 'log_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
     timestamp: new Date().toISOString(),
   };
-  const updated = [newLog, ...logs].slice(0, 100); // keep last 100 logs
+  const updated = [newLog, ...logs].slice(0, 100);
   localStorage.setItem(STORAGE_KEYS.NOTIFICATION_LOGS, JSON.stringify(updated));
   return newLog;
 }

@@ -1,31 +1,35 @@
 import React, { useState } from 'react';
 import { 
-  User as UserIcon, 
+  FlaskConical, 
   Lock, 
-  Eye, 
-  EyeOff, 
+  User as UserIcon, 
+  ArrowRight, 
   AlertCircle, 
-  ArrowRight,
-  FlaskConical,
-  ShieldCheck
+  ShieldCheck, 
+  Phone,
+  Eye,
+  EyeOff
 } from 'lucide-react';
 import { User } from '../types';
-import { INITIAL_USERS } from '../data/initialData';
 
 interface AuthScreenProps {
   users?: User[];
   onLogin?: (user: User) => void;
-  onLoginSuccess?: (user: User) => void;
+  onSelectUser?: (user: User) => void;
 }
 
-export const AuthScreen: React.FC<AuthScreenProps> = ({ users, onLogin, onLoginSuccess }) => {
+export const AuthScreen: React.FC<AuthScreenProps> = ({
+  users = [],
+  onLogin,
+  onSelectUser,
+}) => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const loginCallback = onLoginSuccess || onLogin || (() => {});
+  const loginCallback = onLogin || onSelectUser || (() => {});
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
@@ -33,20 +37,12 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ users, onLogin, onLoginS
     setLoading(true);
 
     try {
-      const userList = (users && users.length > 0) ? users : INITIAL_USERS;
-      const trimmedUser = username.trim().toLowerCase();
-      const trimmedPass = password.trim();
-
-      const found = userList.find(
-        (u) => u.username.toLowerCase() === trimmedUser && (u.password === password || u.password === trimmedPass)
+      const trimmedUser = username.trim();
+      const found = users.find(
+        (u) => u.username.toLowerCase() === trimmedUser.toLowerCase() && u.password === password
       );
 
       if (found) {
-        if (!found.active) {
-          setErrorMsg('Tài khoản này đã bị tạm khóa. Vui lòng liên hệ Quản trị viên Tasago.');
-          setLoading(false);
-          return;
-        }
         setLoading(false);
         loginCallback(found);
       } else {
@@ -61,7 +57,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ users, onLogin, onLoginS
   };
 
   return (
-    <div className="min-h-screen bg-slate-900 text-slate-100 flex flex-col justify-center items-center px-4 py-8 relative overflow-hidden">
+    <div className="min-h-screen bg-slate-900 text-slate-100 flex flex-col justify-center items-center px-4 py-8 relative overflow-hidden font-sans">
       {/* Background Decorative Gradient Orbs */}
       <div className="absolute top-[-10%] left-[-10%] w-[450px] h-[450px] rounded-full bg-emerald-600/20 blur-[100px] pointer-events-none" />
       <div className="absolute bottom-[-10%] right-[-10%] w-[500px] h-[500px] rounded-full bg-teal-600/20 blur-[120px] pointer-events-none" />
@@ -74,35 +70,35 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ users, onLogin, onLoginS
           <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br from-emerald-400 via-emerald-500 to-teal-700 shadow-xl ring-4 ring-emerald-500/20 mb-3">
             <span className="font-black text-2xl text-white tracking-widest">TSG</span>
           </div>
-          <h1 className="text-2xl font-black tracking-tight text-white uppercase">
+          <h1 className="text-xl sm:text-2xl font-black tracking-tight text-white uppercase">
             CÔNG TY CP ĐẦU TƯ TASAGO
           </h1>
-          <p className="text-sm text-emerald-400 font-medium mt-1">
+          <p className="text-xs sm:text-sm text-emerald-400 font-semibold mt-1">
             HỆ THỐNG THEO DÕI TIẾN ĐỘ NÉN MẪU BÊ TÔNG & TRIALMIX
           </p>
           <div className="inline-flex items-center space-x-1.5 bg-emerald-950/80 border border-emerald-700/60 text-emerald-300 text-xs px-3 py-1 rounded-full mt-2">
             <FlaskConical className="w-3.5 h-3.5" />
-            <span>Kiểm Định Chất Lượng • Tự Động Nhắc Zalo/Email</span>
+            <span>Tự Động Nhắc Nhở Zalo / Email Hàng Ngày</span>
           </div>
         </div>
 
         {/* Login Card */}
-        <div className="bg-slate-800/90 backdrop-blur-md rounded-2xl border border-slate-700 p-6 sm:p-8 shadow-2xl">
+        <div className="bg-slate-800/95 backdrop-blur-md rounded-2xl border border-slate-700 p-6 sm:p-8 shadow-2xl">
           <div className="flex items-center justify-between mb-1">
-            <h2 className="text-lg font-bold text-white flex items-center space-x-2">
+            <h2 className="text-base sm:text-lg font-bold text-white flex items-center space-x-2">
               <ShieldCheck className="w-5 h-5 text-emerald-400" />
               <span>Đăng Nhập Hệ Thống</span>
             </h2>
-            <span className="text-xs bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-2 py-0.5 rounded font-mono">
-              v2.0 2026
+            <span className="text-xs bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-2 py-0.5 rounded font-mono font-bold">
+              2026
             </span>
           </div>
           <p className="text-xs text-slate-400 mb-5">
-            Dành cho Quản trị viên & Kỹ thuật viên các trạm trộn Tasago
+            Dành cho Ban Giám Đốc, Kỹ Sư & KTV các trạm trộn Tasago
           </p>
 
           {errorMsg && (
-            <div className="mb-4 bg-red-950/80 border border-red-500/60 text-red-200 text-xs p-3 rounded-lg flex items-start space-x-2 animate-shake">
+            <div className="mb-4 bg-red-950/80 border border-red-500/60 text-red-200 text-xs p-3 rounded-lg flex items-start space-x-2">
               <AlertCircle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
               <span>{errorMsg}</span>
             </div>
@@ -123,7 +119,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ users, onLogin, onLoginS
                   required
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
-                  placeholder="Nhập tên tài khoản"
+                  placeholder="Nhập tên tài khoản (ví dụ: admin)"
                   className="w-full bg-slate-900/90 border border-slate-700 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 rounded-lg pl-9 pr-3 py-2.5 text-sm text-white placeholder-slate-500 transition-colors"
                 />
               </div>
@@ -139,7 +135,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ users, onLogin, onLoginS
                 </div>
                 <input
                   id="login-password-input"
-                  type={showPassword ? 'text' : 'password'}
+                  type={showPassword ? "text" : "password"}
                   required
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
@@ -176,11 +172,14 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ users, onLogin, onLoginS
           </form>
         </div>
 
-        {/* Footer info */}
-        <div className="text-center mt-6 text-xs text-slate-400">
+        {/* Footer info with Support Phone 0942320923 */}
+        <div className="text-center mt-6 text-xs text-slate-400 space-y-1">
           <p>© {new Date().getFullYear()} Công Ty Cổ Phần Đầu Tư Tasago</p>
-          <p className="text-[11px] text-slate-400 mt-0.5">
-            Hỗ trợ kỹ thuật: 028.3780.9999 • Hotline QC: 0908.888.999
+          <p className="text-xs text-emerald-400 font-bold">
+            <a href="tel:0942320923" className="hover:underline inline-flex items-center gap-1">
+              <Phone className="w-3.5 h-3.5" />
+              <span>Hỗ trợ kỹ thuật: 0942320923 (0942.320.923)</span>
+            </a>
           </p>
         </div>
       </div>

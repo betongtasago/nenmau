@@ -15,10 +15,15 @@ import {
   Printer, 
   ArrowUpDown,
   Building2,
-  ExternalLink
+  ExternalLink,
+  ChevronRight,
+  Sparkles,
+  Layers,
+  MapPin,
+  Check
 } from 'lucide-react';
 import { ConcreteSample, Station, User } from '../types';
-import { formatDateVN } from '../utils/storage';
+import { formatDateVN, ViewMode } from '../utils/storage';
 
 interface SampleListProps {
   samples: ConcreteSample[];
@@ -40,6 +45,7 @@ interface SampleListProps {
   onOpenNotification?: (sample: ConcreteSample) => void;
   onExportExcel?: (samples: ConcreteSample[]) => void;
   userRole?: string;
+  viewMode?: ViewMode;
 }
 
 export const SampleList: React.FC<SampleListProps> = ({
@@ -62,6 +68,7 @@ export const SampleList: React.FC<SampleListProps> = ({
   onOpenNotification,
   onExportExcel,
   userRole,
+  viewMode = 'auto',
 }) => {
   const handleAddNew = onAddNew || onOpenNewSampleModal || (() => {});
   const handleEdit = onEdit || onSelectSampleForEdit || (() => {});
@@ -70,6 +77,7 @@ export const SampleList: React.FC<SampleListProps> = ({
   const handleDelete = onDelete || onDeleteSample || (() => {});
   const handleNotify = onOpenNotification || onSendSingleNotification || (() => {});
   const handleExport = onExportExcel || (() => {});
+
   const stationMap = useMemo(() => {
     const map = new Map<string, Station>();
     stations.forEach(s => map.set(s.id, s));
@@ -106,24 +114,26 @@ export const SampleList: React.FC<SampleListProps> = ({
       if (statusFilter !== 'all' && item.status !== statusFilter) {
         return false;
       }
-      if (ageFilter !== 'all' && item.ageType !== ageFilter) {
-        return false;
+      if (ageFilter !== 'all') {
+        if (ageFilter === 'R28_WATERPROOF' && item.ageType !== 'R28_WATERPROOF') return false;
+        if (ageFilter === 'EXPANSION' && item.ageType !== 'EXPANSION') return false;
+        if (item.ageType !== ageFilter && !item.ageType.startsWith(ageFilter)) return false;
       }
       if (gradeFilter !== 'all' && item.concreteGrade !== gradeFilter) {
         return false;
       }
       if (searchQuery.trim()) {
-        const q = searchQuery.toLowerCase().trim();
-        const matchProject = item.projectName.toLowerCase().includes(q);
-        const matchContractor = item.contractor.toLowerCase().includes(q);
-        const matchComponent = item.component.toLowerCase().includes(q);
-        const matchCode = (item.sampleCode || '').toLowerCase().includes(q) || item.id.toLowerCase().includes(q);
-        const matchPhone = (item.contactPhone || '').includes(q);
-        const matchPerson = (item.contactPerson || '').toLowerCase().includes(q);
-        const matchSampler = (item.samplerName || '').toLowerCase().includes(q);
-        if (!matchProject && !matchContractor && !matchComponent && !matchCode && !matchPhone && !matchPerson && !matchSampler) {
-          return false;
-        }
+        const q = searchQuery.toLowerCase();
+        const station = stationMap.get(item.stationId);
+        const matchProject = item.projectName?.toLowerCase().includes(q);
+        const matchContractor = item.contractor?.toLowerCase().includes(q);
+        const matchCode = item.sampleCode?.toLowerCase().includes(q);
+        const matchContact = item.contactPerson?.toLowerCase().includes(q);
+        const matchPhone = item.contactPhone?.includes(q);
+        const matchStation = station?.name.toLowerCase().includes(q);
+        const matchSampler = item.samplerName?.toLowerCase().includes(q);
+        const matchComponent = item.component?.toLowerCase().includes(q);
+        return matchProject || matchContractor || matchCode || matchContact || matchPhone || matchStation || matchSampler || matchComponent;
       }
       return true;
     }).sort((a, b) => {
@@ -133,93 +143,56 @@ export const SampleList: React.FC<SampleListProps> = ({
       if (valA > valB) return sortAsc ? 1 : -1;
       return 0;
     });
-  }, [samples, selectedStationId, activeCategory, statusFilter, ageFilter, gradeFilter, searchQuery, sortField, sortAsc]);
+  }, [samples, selectedStationId, activeCategory, statusFilter, ageFilter, gradeFilter, searchQuery, sortField, sortAsc, stationMap]);
 
-  const shapeMap: Record<string, string> = {
-    cube_150: 'Vuông 150',
-    cylinder_150_300: 'Trụ Ø150x300',
-    waterproof_150: 'Chống thấm',
-    expansion: 'Bù co ngót',
-    other: 'Khác',
-  };
+  // Decide if mobile layout should be shown
+  const showMobileLayout = viewMode === 'mobile';
+  const showDesktopLayout = viewMode === 'pc';
 
   return (
-    <div className="space-y-5 pb-10">
-      {/* Control Ribbon & Filter Bar */}
-      <div className="bg-white rounded-xl border border-slate-200 p-4 sm:p-5 shadow-sm space-y-4">
+    <div className="space-y-4 font-sans">
+      
+      {/* Category Tabs & Quick Filters Bar */}
+      <div className="bg-white rounded-xl border border-slate-200 p-3 sm:p-4 shadow-xs space-y-3">
         
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
-          <div>
-            <div className="flex items-center gap-2">
-              <FlaskConical className="w-5 h-5 text-emerald-700" />
-              <h2 className="text-lg font-bold text-slate-800 tracking-tight">
-                Lịch Nén Mẫu Bê Tông & Cấp Phối
-              </h2>
-            </div>
-            <p className="text-xs text-slate-500 mt-0.5">
-              {selectedStationId === 'all' 
-                ? `Hiển thị ${filteredSamples.length}/${samples.length} mẫu từ tất cả các trạm`
-                : `Danh sách mẫu tại ${stationMap.get(selectedStationId)?.name || 'Trạm'} (${filteredSamples.length} mẫu)`}
-            </p>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <button
-              onClick={handleAddNew}
-              className="bg-emerald-600 hover:bg-emerald-700 text-white font-medium px-4 py-2 rounded-md text-sm flex items-center gap-1.5 transition-colors cursor-pointer shadow-xs"
-            >
-              <PlusCircle className="w-4 h-4" />
-              <span>+ Thêm Mẫu Mới</span>
-            </button>
-
-            <button
-              onClick={() => handleExport(filteredSamples)}
-              className="bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium px-3.5 py-2 rounded-md border border-slate-200 text-sm flex items-center gap-1.5 transition-colors cursor-pointer"
-            >
-              <FileSpreadsheet className="w-4 h-4 text-emerald-700" />
-              <span>Xuất Excel ({filteredSamples.length})</span>
-            </button>
-          </div>
-        </div>
-
-        {/* Category Tabs: Tất Cả / Bê Tông Đã Cấp / Trialmix */}
-        <div className="flex border-b border-slate-200 text-xs sm:text-sm font-semibold">
+        {/* Category Tabs */}
+        <div className="flex border-b border-slate-200 text-xs sm:text-sm font-semibold overflow-x-auto scrollbar-none gap-1 sm:gap-4">
           <button
             onClick={() => setActiveCategory('all')}
-            className={`pb-2.5 px-4 transition-all cursor-pointer ${
+            className={`pb-2 px-3 sm:px-4 transition-all cursor-pointer whitespace-nowrap ${
               activeCategory === 'all'
                 ? 'text-emerald-800 border-b-2 border-emerald-700 font-bold'
                 : 'text-slate-500 hover:text-slate-800'
             }`}
           >
-            Tất Cả Mẫu ({samples.length})
+            📋 Tất Cả Mẫu ({samples.length})
           </button>
 
           <button
             onClick={() => setActiveCategory('commercial')}
-            className={`pb-2.5 px-4 transition-all cursor-pointer ${
+            className={`pb-2 px-3 sm:px-4 transition-all cursor-pointer whitespace-nowrap ${
               activeCategory === 'commercial'
                 ? 'text-emerald-800 border-b-2 border-emerald-700 font-bold'
                 : 'text-slate-500 hover:text-slate-800'
             }`}
           >
-            🚚 Bê Tông Thương Phẩm ({samples.filter(s => s.category === 'commercial').length})
+            🚚 Thương Phẩm ({samples.filter(s => s.category === 'commercial').length})
           </button>
 
           <button
             onClick={() => setActiveCategory('trialmix')}
-            className={`pb-2.5 px-4 transition-all cursor-pointer ${
+            className={`pb-2 px-3 sm:px-4 transition-all cursor-pointer whitespace-nowrap ${
               activeCategory === 'trialmix'
                 ? 'text-emerald-800 border-b-2 border-emerald-700 font-bold'
                 : 'text-slate-500 hover:text-slate-800'
             }`}
           >
-            🧪 Thí Nghiệm Trialmix ({samples.filter(s => s.category === 'trialmix').length})
+            🧪 Trialmix / R&D ({samples.filter(s => s.category === 'trialmix').length})
           </button>
         </div>
 
         {/* Filter Controls Row */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2.5 text-xs">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2 text-xs">
           
           {/* Search Box */}
           <div className="relative lg:col-span-2">
@@ -228,8 +201,8 @@ export const SampleList: React.FC<SampleListProps> = ({
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Tìm theo tên công trình, nhà thầu, SĐT, KTV..."
-              className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-300 rounded-md text-xs focus:ring-1 focus:ring-emerald-500 focus:border-emerald-500 text-slate-800"
+              placeholder="Tìm theo công trình, nhà thầu, mã mẫu, KTV..."
+              className="w-full pl-9 pr-7 py-2 bg-slate-50 border border-slate-300 rounded-lg text-xs focus:ring-1 focus:ring-emerald-500 focus:border-emerald-500 text-slate-800"
             />
             {searchQuery && (
               <button 
@@ -246,7 +219,7 @@ export const SampleList: React.FC<SampleListProps> = ({
             <select
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
-              className="w-full py-2 px-3 bg-slate-50 border border-slate-300 rounded-md text-xs font-medium text-slate-700 focus:ring-1 focus:ring-emerald-500 cursor-pointer"
+              className="w-full py-2 px-2.5 bg-slate-50 border border-slate-300 rounded-lg text-xs font-semibold text-slate-700 focus:ring-1 focus:ring-emerald-500 cursor-pointer"
             >
               <option value="all">🔍 Tất Cả Tình Trạng</option>
               <option value="due_today">🔴 Đến Hạn Hôm Nay</option>
@@ -262,7 +235,7 @@ export const SampleList: React.FC<SampleListProps> = ({
             <select
               value={ageFilter}
               onChange={(e) => setAgeFilter(e.target.value)}
-              className="w-full py-2 px-3 bg-slate-50 border border-slate-300 rounded-md text-xs font-medium text-slate-700 focus:ring-1 focus:ring-emerald-500 cursor-pointer"
+              className="w-full py-2 px-2.5 bg-slate-50 border border-slate-300 rounded-lg text-xs font-semibold text-slate-700 focus:ring-1 focus:ring-emerald-500 cursor-pointer"
             >
               <option value="all">⏱️ Tất Cả Tuổi Nén</option>
               <option value="R3">Tuổi R3 (3 ngày)</option>
@@ -279,7 +252,7 @@ export const SampleList: React.FC<SampleListProps> = ({
             <select
               value={gradeFilter}
               onChange={(e) => setGradeFilter(e.target.value)}
-              className="w-full py-2 px-3 bg-slate-50 border border-slate-300 rounded-md text-xs font-medium text-slate-700 focus:ring-1 focus:ring-emerald-500 cursor-pointer"
+              className="w-full py-2 px-2.5 bg-slate-50 border border-slate-300 rounded-lg text-xs font-semibold text-slate-700 focus:ring-1 focus:ring-emerald-500 cursor-pointer"
             >
               <option value="all">🧪 Mác Bê Tông (Tất Cả)</option>
               {availableGrades.map(g => (
@@ -292,34 +265,190 @@ export const SampleList: React.FC<SampleListProps> = ({
 
       </div>
 
-      {/* Main Table - Styled exactly as Professional Polish */}
-      <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-        {filteredSamples.length === 0 ? (
-          <div className="p-12 text-center text-slate-400 space-y-3">
-            <FlaskConical className="w-12 h-12 mx-auto text-slate-300" />
-            <p className="text-base font-bold text-slate-600">Không tìm thấy mẫu bê tông nào phù hợp</p>
-            <p className="text-xs text-slate-400">Thử xóa bớt bộ lọc hoặc thêm mẫu mới</p>
-            <button
-              onClick={onOpenNewSampleModal}
-              className="bg-emerald-600 hover:bg-emerald-700 text-white font-medium px-4 py-2 rounded-md text-xs inline-flex items-center gap-1.5 mt-2 cursor-pointer"
-            >
-              <PlusCircle className="w-4 h-4" />
-              <span>+ Thêm Mẫu Mới Ngay</span>
-            </button>
-          </div>
-        ) : (
+      {/* Empty State */}
+      {filteredSamples.length === 0 && (
+        <div className="bg-white rounded-xl border border-slate-200 p-8 text-center text-slate-400 space-y-3 shadow-xs">
+          <FlaskConical className="w-12 h-12 mx-auto text-slate-300" />
+          <p className="text-base font-bold text-slate-600">Không tìm thấy mẫu bê tông nào phù hợp</p>
+          <p className="text-xs text-slate-400">Thử thay đổi từ khóa tìm kiếm hoặc lọc theo trạm khác</p>
+          <button
+            onClick={handleAddNew}
+            className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-4 py-2 rounded-lg text-xs inline-flex items-center gap-1.5 mt-2 cursor-pointer shadow-xs"
+          >
+            <PlusCircle className="w-4 h-4" />
+            <span>+ Thêm Mẫu Mới Ngay</span>
+          </button>
+        </div>
+      )}
+
+      {/* MOBILE CARD VIEW (Active when viewMode === 'mobile' or automatically on screens < md unless viewMode === 'pc') */}
+      {filteredSamples.length > 0 && (
+        <div className={`${showMobileLayout ? 'block' : showDesktopLayout ? 'hidden' : 'block md:hidden'} space-y-3`}>
+          {filteredSamples.map((sample) => {
+            const station = stationMap.get(sample.stationId);
+            const isTested = sample.status === 'tested_passed' || sample.status === 'tested_failed';
+            const isDueToday = sample.status === 'due_today';
+            const isOverdue = sample.status === 'overdue';
+
+            return (
+              <div 
+                key={sample.id}
+                className={`bg-white rounded-xl border p-3.5 shadow-xs transition-all ${
+                  isDueToday 
+                    ? 'border-orange-300 bg-orange-50/20' 
+                    : isOverdue 
+                    ? 'border-amber-300 bg-amber-50/10' 
+                    : 'border-slate-200'
+                }`}
+              >
+                {/* Header: Project Name + Status Badge */}
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 uppercase font-mono">
+                        {sample.sampleCode}
+                      </span>
+                      <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
+                        sample.category === 'trialmix' ? 'bg-purple-100 text-purple-800' : 'bg-blue-50 text-blue-700'
+                      }`}>
+                        {sample.category === 'trialmix' ? '🧪 Trialmix' : '🚚 Thương phẩm'}
+                      </span>
+                    </div>
+                    <button
+                      onClick={() => handleDetail(sample)}
+                      className="font-bold text-slate-900 text-sm mt-1 text-left line-clamp-1 hover:text-emerald-700 cursor-pointer"
+                    >
+                      {sample.projectName}
+                    </button>
+                    <p className="text-xs text-slate-500 line-clamp-1">
+                      {station?.name || 'Trạm Tasago'} • {sample.contractor}
+                    </p>
+                  </div>
+
+                  {/* Status Indicator */}
+                  <div>
+                    {isTested && sample.testResult ? (
+                      <div className="text-right">
+                        <span className={`inline-block text-[11px] font-bold px-2 py-0.5 rounded ${
+                          sample.status === 'tested_passed' ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-800'
+                        }`}>
+                          {sample.status === 'tested_passed' ? '✅ ĐẠT' : '❌ K.ĐẠT'}
+                        </span>
+                        <div className="text-xs font-bold text-emerald-700 mt-0.5">
+                          {sample.testResult.avgStrengthMpa.toFixed(1)} MPa
+                        </div>
+                      </div>
+                    ) : (
+                      <span className={`inline-block text-[10px] font-bold px-2 py-1 rounded ${
+                        isDueToday ? 'bg-red-100 text-red-700 animate-pulse' :
+                        isOverdue ? 'bg-amber-100 text-amber-800' : 'bg-slate-100 text-slate-600'
+                      }`}>
+                        {isDueToday ? '🔴 ĐẾN HẠN' : isOverdue ? '⚠️ QUÁ HẠN' : '⏳ CHỜ NÉN'}
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Specs Grid */}
+                <div className="grid grid-cols-2 gap-2 mt-2.5 pt-2.5 border-t border-slate-100 text-xs text-slate-600">
+                  <div className="bg-slate-50 p-2 rounded-lg">
+                    <span className="text-[10px] text-slate-400 block font-medium">Ngày Nén Dự Kiến</span>
+                    <span className="font-bold text-emerald-800 font-mono text-xs">
+                      {formatDateVN(sample.scheduledTestDate)}
+                    </span>
+                    <span className="text-[10px] text-slate-400 block">Đúc: {formatDateVN(sample.castDate)}</span>
+                  </div>
+
+                  <div className="bg-slate-50 p-2 rounded-lg">
+                    <span className="text-[10px] text-slate-400 block font-medium">Mác & Tuổi</span>
+                    <div className="flex items-center gap-1 font-bold text-slate-800 text-xs">
+                      <span>{sample.concreteGrade}</span>
+                      <span className="text-emerald-700">({sample.ageType})</span>
+                    </div>
+                    <span className="text-[10px] text-slate-400 block">{sample.volumeM3} m³ • {sample.groupCount} tổ ({sample.pieceCount}v)</span>
+                  </div>
+                </div>
+
+                {/* Component Name */}
+                <div className="mt-2 text-xs text-slate-700 flex items-center gap-1 bg-slate-50/80 px-2.5 py-1.5 rounded-md">
+                  <Layers className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                  <span className="truncate">{sample.component || 'Kết cấu bê tông'}</span>
+                </div>
+
+                {/* Mobile Quick Action Ribbon */}
+                <div className="mt-3 pt-2 border-t border-slate-100 flex items-center justify-between gap-1 text-xs">
+                  <a
+                    href={`tel:${sample.contactPhone || '0942320923'}`}
+                    className="flex-1 py-1.5 px-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 rounded-lg font-bold flex items-center justify-center gap-1 transition-colors"
+                  >
+                    <Phone className="w-3.5 h-3.5 text-emerald-600" />
+                    <span>Gọi</span>
+                  </a>
+
+                  {!isTested && (
+                    <button
+                      onClick={() => handleTest(sample)}
+                      className="flex-1 py-1.5 px-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-bold flex items-center justify-center gap-1 transition-colors cursor-pointer shadow-xs"
+                    >
+                      <FlaskConical className="w-3.5 h-3.5" />
+                      <span>Nhập KQ</span>
+                    </button>
+                  )}
+
+                  <button
+                    onClick={() => handleNotify(sample)}
+                    className="p-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg cursor-pointer transition-colors"
+                    title="Gửi Zalo / Email"
+                  >
+                    <Send className="w-4 h-4 text-blue-600" />
+                  </button>
+
+                  <button
+                    onClick={() => handleDetail(sample)}
+                    className="p-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg cursor-pointer transition-colors"
+                    title="Xem chi tiết"
+                  >
+                    <Printer className="w-4 h-4 text-slate-600" />
+                  </button>
+
+                  <button
+                    onClick={() => handleEdit(sample)}
+                    className="p-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg cursor-pointer transition-colors"
+                    title="Sửa"
+                  >
+                    <Edit3 className="w-4 h-4 text-amber-600" />
+                  </button>
+
+                  <button
+                    onClick={() => handleDelete(sample.id)}
+                    className="p-1.5 bg-slate-100 hover:bg-red-50 text-slate-400 hover:text-red-600 rounded-lg cursor-pointer transition-colors"
+                    title="Xóa"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* DESKTOP TABLE VIEW (Active when viewMode === 'pc' or automatically on screens >= md unless viewMode === 'mobile') */}
+      {filteredSamples.length > 0 && (
+        <div className={`${showDesktopLayout ? 'block' : showMobileLayout ? 'hidden' : 'hidden md:block'} bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden`}>
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse">
               <thead className="bg-slate-50 text-[11px] uppercase tracking-wider text-slate-500 font-bold border-b border-slate-200">
                 <tr>
-                  <th className="px-6 py-3">Ngày nén</th>
-                  <th className="px-6 py-3">Công trình / Trạm</th>
-                  <th className="px-6 py-3">Hạng mục</th>
-                  <th className="px-6 py-3">Mác / Tuổi</th>
-                  <th className="px-6 py-3 text-center">Số tổ</th>
-                  <th className="px-6 py-3">Tình Trạng / KQ</th>
-                  <th className="px-6 py-3">Liên hệ</th>
-                  <th className="px-6 py-3 text-right">Thao Tác</th>
+                  <th className="px-5 py-3">Ngày Nén</th>
+                  <th className="px-5 py-3">Công Trình / Trạm</th>
+                  <th className="px-5 py-3">Hạng Mục</th>
+                  <th className="px-5 py-3">Mác / Tuổi</th>
+                  <th className="px-5 py-3 text-center">Số Tổ</th>
+                  <th className="px-5 py-3">Tình Trạng / KQ</th>
+                  <th className="px-5 py-3">Liên Hệ</th>
+                  <th className="px-5 py-3 text-right">Thao Tác</th>
                 </tr>
               </thead>
               <tbody className="text-sm divide-y divide-slate-100">
@@ -337,34 +466,34 @@ export const SampleList: React.FC<SampleListProps> = ({
                       }`}
                     >
                       {/* Ngày nén */}
-                      <td className="px-6 py-4 font-mono font-bold text-emerald-700 whitespace-nowrap">
-                        <div>{formatDateVN(sample.scheduledTestDate)}</div>
+                      <td className="px-5 py-3.5 font-mono font-bold text-emerald-700 whitespace-nowrap">
+                        <div className="text-xs">{formatDateVN(sample.scheduledTestDate)}</div>
                         <div className="text-[10px] text-slate-400 font-normal">
                           Đúc: {formatDateVN(sample.castDate)}
                         </div>
                       </td>
 
                       {/* Công trình / Trạm */}
-                      <td className="px-6 py-4">
+                      <td className="px-5 py-3.5">
                         <button
-                          onClick={() => onSelectSampleDetail(sample)}
-                          className="font-bold text-slate-900 hover:text-emerald-700 text-left line-clamp-1 block cursor-pointer"
+                          onClick={() => handleDetail(sample)}
+                          className="font-bold text-slate-900 hover:text-emerald-700 text-left line-clamp-1 block cursor-pointer text-xs sm:text-sm"
                         >
                           {sample.projectName}
                         </button>
-                        <div className="text-xs text-slate-400">
-                          {station ? station.name.replace('Trạm Tasago ', 'Trạm ') : 'Trạm Tasago'} • {sample.contractor}
+                        <div className="text-xs text-slate-400 line-clamp-1">
+                          {station ? station.name : 'Trạm Tasago'} • {sample.contractor}
                         </div>
                       </td>
 
                       {/* Hạng mục */}
-                      <td className="px-6 py-4 text-slate-600 text-xs">
-                        <div className="font-medium text-slate-800">{sample.component}</div>
+                      <td className="px-5 py-3.5 text-slate-600 text-xs">
+                        <div className="font-medium text-slate-800 line-clamp-1">{sample.component}</div>
                         <div className="text-slate-400">{sample.volumeM3} m³</div>
                       </td>
 
                       {/* Mác / Tuổi */}
-                      <td className="px-6 py-4 whitespace-nowrap">
+                      <td className="px-5 py-3.5 whitespace-nowrap">
                         <span className="bg-slate-100 px-2 py-0.5 rounded text-xs font-bold text-slate-800">
                           {sample.concreteGrade}
                         </span>
@@ -378,7 +507,7 @@ export const SampleList: React.FC<SampleListProps> = ({
                       </td>
 
                       {/* Số tổ */}
-                      <td className="px-6 py-4 text-center font-semibold text-slate-700 text-xs">
+                      <td className="px-5 py-3.5 text-center font-semibold text-slate-700 text-xs">
                         {String(sample.groupCount).padStart(2, '0')}
                         <div className="text-[10px] text-slate-400 font-normal">
                           ({sample.pieceCount} viên)
@@ -386,7 +515,7 @@ export const SampleList: React.FC<SampleListProps> = ({
                       </td>
 
                       {/* Tình Trạng / KQ */}
-                      <td className="px-6 py-4 whitespace-nowrap">
+                      <td className="px-5 py-3.5 whitespace-nowrap">
                         {isTested && sample.testResult ? (
                           <div>
                             <span className="font-bold text-emerald-700 text-xs">
@@ -400,7 +529,7 @@ export const SampleList: React.FC<SampleListProps> = ({
                             </span>
                           </div>
                         ) : (
-                          <div className="space-y-1">
+                          <div className="space-y-0.5">
                             <span className={`inline-block text-[10px] font-bold px-2 py-0.5 rounded ${
                               isDueToday ? 'bg-red-100 text-red-700 animate-pulse' :
                               isOverdue ? 'bg-amber-100 text-amber-800' : 'bg-slate-100 text-slate-600'
@@ -409,7 +538,7 @@ export const SampleList: React.FC<SampleListProps> = ({
                             </span>
                             <button
                               onClick={() => handleTest(sample)}
-                              className="block text-emerald-700 hover:text-emerald-900 font-semibold text-[11px] hover:underline cursor-pointer"
+                              className="block text-emerald-700 hover:text-emerald-900 font-bold text-[11px] hover:underline cursor-pointer"
                             >
                               + Nhập KQ
                             </button>
@@ -418,39 +547,39 @@ export const SampleList: React.FC<SampleListProps> = ({
                       </td>
 
                       {/* Liên hệ */}
-                      <td className="px-6 py-4 text-xs italic text-slate-600 whitespace-nowrap">
-                        <div>{sample.contactPerson}</div>
+                      <td className="px-5 py-3.5 text-xs text-slate-600 whitespace-nowrap">
+                        <div className="font-medium text-slate-800">{sample.contactPerson}</div>
                         <a 
-                          href={`tel:${sample.contactPhone}`} 
-                          className="text-emerald-700 font-mono font-medium not-italic hover:underline flex items-center gap-1"
+                          href={`tel:${sample.contactPhone || '0942320923'}`} 
+                          className="text-emerald-700 font-mono font-bold hover:underline flex items-center gap-1"
                         >
                           <Phone className="w-3 h-3" />
-                          <span>{sample.contactPhone}</span>
+                          <span>{sample.contactPhone || '0942320923'}</span>
                         </a>
                       </td>
 
                       {/* Thao tác */}
-                      <td className="px-6 py-4 text-right whitespace-nowrap space-x-1">
+                      <td className="px-5 py-3.5 text-right whitespace-nowrap space-x-1">
                         <button
                           onClick={() => handleNotify(sample)}
                           className="p-1.5 text-slate-500 hover:text-emerald-700 hover:bg-emerald-50 rounded transition-colors cursor-pointer"
                           title="Gửi Zalo / Email"
                         >
-                          <Send className="w-4 h-4" />
+                          <Send className="w-4 h-4 text-blue-600" />
                         </button>
                         <button
                           onClick={() => handleDetail(sample)}
                           className="p-1.5 text-slate-500 hover:text-blue-700 hover:bg-blue-50 rounded transition-colors cursor-pointer"
                           title="Xem Chi Tiết & In"
                         >
-                          <Printer className="w-4 h-4" />
+                          <Printer className="w-4 h-4 text-slate-600" />
                         </button>
                         <button
                           onClick={() => handleEdit(sample)}
                           className="p-1.5 text-slate-500 hover:text-amber-700 hover:bg-amber-50 rounded transition-colors cursor-pointer"
                           title="Chỉnh Sửa"
                         >
-                          <Edit3 className="w-4 h-4" />
+                          <Edit3 className="w-4 h-4 text-amber-600" />
                         </button>
                         <button
                           onClick={() => handleDelete(sample.id)}
@@ -466,8 +595,8 @@ export const SampleList: React.FC<SampleListProps> = ({
               </tbody>
             </table>
           </div>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 };
