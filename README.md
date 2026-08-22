@@ -18,7 +18,7 @@ Hệ thống phần mềm chuyên dụng hỗ trợ theo dõi, cảnh báo tiế
 1. **Quản Lý Đa Trạm Trộn Bê Tông:**
    - Trạm Tasago Hóc Môn (Hóc Môn, TP.HCM)
    - Trạm Tasago Xuyên Á (Kcn Xuyên Á, Tây Ninh)
-   - Trạm Tasago Tân Phú (KCN Tân Bình / Tân Phú, TP.HCM)
+   - Trạm Tasago Hóa An
    - Trạm Tasago-Tnt1 Tây Ninh (Kcn Thành Thành Công)
    - Trạm Tasago-Tnt2 Tây Ninh (Kcn Phước Đông)
 
