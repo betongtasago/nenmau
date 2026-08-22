@@ -20,7 +20,7 @@ import {
   FileSpreadsheet,
   Download
 } from 'lucide-react';
-import { ConcreteSample, Station } from '../types';
+import { ConcreteSample, Station, User } from '../types';
 import { formatDateVN } from '../utils/storage';
 import { exportProjectTrackingExcel } from '../utils/excelExport';
 
@@ -30,6 +30,7 @@ interface SampleDetailModalProps {
   sample: ConcreteSample | null;
   stations: Station[];
   allSamples?: ConcreteSample[];
+  currentUser?: User | null;
   onOpenTestModal: (sample: ConcreteSample) => void;
   onOpenEditModal: (sample: ConcreteSample) => void;
   onSendNotification: (sample: ConcreteSample) => void;
@@ -41,6 +42,7 @@ export const SampleDetailModal: React.FC<SampleDetailModalProps> = ({
   sample,
   stations,
   allSamples = [],
+  currentUser,
   onOpenTestModal,
   onOpenEditModal,
   onSendNotification,
@@ -50,6 +52,10 @@ export const SampleDetailModal: React.FC<SampleDetailModalProps> = ({
   const station = stations.find(s => s.id === sample.stationId);
   const result = sample.testResult;
   const isTested = sample.status === 'tested_passed' || sample.status === 'tested_failed';
+
+  const canModify = !currentUser || currentUser.role === 'admin' || 
+    (sample.createdBy && sample.createdBy === currentUser.username) || 
+    (sample.samplerName && sample.samplerName.trim().toLowerCase() === currentUser.fullName.trim().toLowerCase());
 
   const handleExportProjectExcel = () => {
     const projectSamples = allSamples.length > 0
@@ -301,27 +307,35 @@ export const SampleDetailModal: React.FC<SampleDetailModalProps> = ({
             </div>
 
             <div className="flex items-center space-x-2">
-              <button
-                onClick={() => {
-                  onClose();
-                  onOpenEditModal(sample);
-                }}
-                className="bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold px-3.5 py-2 rounded-xl text-xs flex items-center space-x-1.5 transition-colors cursor-pointer"
-              >
-                <Edit3 className="w-4 h-4 text-amber-600" />
-                <span>Chỉnh Sửa</span>
-              </button>
+              {canModify ? (
+                <>
+                  <button
+                    onClick={() => {
+                      onClose();
+                      onOpenEditModal(sample);
+                    }}
+                    className="bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold px-3.5 py-2 rounded-xl text-xs flex items-center space-x-1.5 transition-colors cursor-pointer"
+                  >
+                    <Edit3 className="w-4 h-4 text-amber-600" />
+                    <span>Chỉnh Sửa</span>
+                  </button>
 
-              <button
-                onClick={() => {
-                  onClose();
-                  onOpenTestModal(sample);
-                }}
-                className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-4 py-2 rounded-xl text-xs flex items-center space-x-1.5 shadow transition-all cursor-pointer"
-              >
-                <FlaskConical className="w-4 h-4" />
-                <span>{isTested ? 'Cập Nhật Kết Quả Nén' : 'Nhập Kết Quả Nén Mẫu'}</span>
-              </button>
+                  <button
+                    onClick={() => {
+                      onClose();
+                      onOpenTestModal(sample);
+                    }}
+                    className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-4 py-2 rounded-xl text-xs flex items-center space-x-1.5 shadow transition-all cursor-pointer"
+                  >
+                    <FlaskConical className="w-4 h-4" />
+                    <span>{isTested ? 'Cập Nhật Kết Quả Nén' : 'Nhập Kết Quả Nén Mẫu'}</span>
+                  </button>
+                </>
+              ) : (
+                <span className="text-xs text-slate-500 bg-slate-100 px-3 py-2 rounded-xl font-medium border border-slate-200">
+                  🔒 Chế độ chỉ xem (Mẫu do {sample.createdByName || sample.samplerName || 'KTV khác'} tạo)
+                </span>
+              )}
             </div>
           </div>
 

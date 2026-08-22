@@ -112,39 +112,111 @@ export default function App() {
     }
   }, [currentUser]);
 
+  // Two-way Real-time synchronization helper
+  const syncWithServer = useCallback(async (pushData?: { samples?: ConcreteSample[]; stations?: Station[]; users?: User[]; config?: NotificationConfig }) => {
+    try {
+      if (pushData) {
+        // Push state to backend server
+        const res = await fetch('/api/server-sync', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            samples: pushData.samples || samples,
+            stations: pushData.stations || stations,
+            users: pushData.users || users,
+            config: pushData.config || notificationConfig
+          })
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.users && Array.isArray(data.users) && data.users.length > 0) {
+            setUsers(data.users);
+            saveUsers(data.users);
+          }
+          if (data.samples && Array.isArray(data.samples)) {
+            const recalced = recalculateSampleStatuses(data.samples);
+            setSamples(recalced);
+            saveSamples(recalced);
+          }
+          if (data.stations && Array.isArray(data.stations)) {
+            setStations(data.stations);
+            saveStations(data.stations);
+          }
+        }
+      } else {
+        // Pull latest state from backend server
+        const res = await fetch('/api/server-sync');
+        if (res.ok) {
+          const data = await res.json();
+          if (data.users && Array.isArray(data.users) && data.users.length > 0) {
+            setUsers(prev => {
+              // Only update if changed
+              if (JSON.stringify(prev) !== JSON.stringify(data.users)) {
+                saveUsers(data.users);
+                return data.users;
+              }
+              return prev;
+            });
+          }
+          if (data.samples && Array.isArray(data.samples) && data.samples.length > 0) {
+            setSamples(prev => {
+              const currentJson = JSON.stringify(prev);
+              const serverJson = JSON.stringify(data.samples);
+              if (currentJson !== serverJson) {
+                const recalced = recalculateSampleStatuses(data.samples);
+                saveSamples(recalced);
+                return recalced;
+              }
+              return prev;
+            });
+          }
+          if (data.stations && Array.isArray(data.stations) && data.stations.length > 0) {
+            setStations(prev => {
+              if (JSON.stringify(prev) !== JSON.stringify(data.stations)) {
+                saveStations(data.stations);
+                return data.stations;
+              }
+              return prev;
+            });
+          }
+        }
+      }
+    } catch (err) {
+      // Offline fallback
+    }
+  }, [samples, stations, users, notificationConfig]);
+
   // Recalculate status and trigger automated notification check on mount & periodically
   useEffect(() => {
     const fresh = recalculateSampleStatuses(loadSamples());
     setSamples(fresh);
     saveSamples(fresh);
 
-    // Sync to backend server for background 07:00 AM Cron
-    fetch('/api/server-sync', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        samples: fresh,
-        stations,
-        config: notificationConfig
-      })
-    }).catch(() => {});
+    // Initial server push & sync
+    syncWithServer({
+      samples: fresh,
+      stations,
+      users,
+      config: notificationConfig
+    });
 
     // Background Notification Check (Triggers at 07:00 AM VN Time)
     if (currentUser) {
       checkAndTriggerAutoNotifications(fresh, stations, notificationConfig).catch(console.error);
     }
 
-    // Interval check every 30 seconds for precise 07:00 AM daily triggers
+    // Interval check every 5 seconds for real-time multi-user synchronization & notifications
     const timer = setInterval(() => {
+      syncWithServer();
       const currentSamples = recalculateSampleStatuses(loadSamples());
       setSamples(currentSamples);
       if (currentUser) {
         checkAndTriggerAutoNotifications(currentSamples, stations, notificationConfig).catch(console.error);
       }
-    }, 30 * 1000);
+    }, 5000);
 
     return () => clearInterval(timer);
-  }, [currentUser, notificationConfig, stations]);
+  }, []);
 
   const handleRequestPushPermission = async () => {
     const granted = await requestBrowserNotificationPermission();
@@ -229,6 +301,7 @@ export default function App() {
     const finalized = recalculateSampleStatuses(updatedSamples);
     setSamples(finalized);
     saveSamples(finalized);
+    syncWithServer({ samples: finalized });
     setIsFormModalOpen(false);
     setEditingSample(null);
   };
@@ -239,6 +312,7 @@ export default function App() {
       const updated = samples.filter(s => s.id !== id);
       setSamples(updated);
       saveSamples(updated);
+      syncWithServer({ samples: updated });
     }
   };
 
@@ -248,6 +322,7 @@ export default function App() {
     const finalized = recalculateSampleStatuses(updated);
     setSamples(finalized);
     saveSamples(finalized);
+    syncWithServer({ samples: finalized });
   };
 
   // Handler: Quick Mark Sample Tested (1-click from Calendar)
@@ -294,6 +369,7 @@ export default function App() {
     const finalized = recalculateSampleStatuses(updated);
     setSamples(finalized);
     saveSamples(finalized);
+    syncWithServer({ samples: finalized });
   };
 
   // Handler: Save Test Result
@@ -314,6 +390,7 @@ export default function App() {
     const finalized = recalculateSampleStatuses(updated);
     setSamples(finalized);
     saveSamples(finalized);
+    syncWithServer({ samples: finalized });
     setIsTestResultModalOpen(false);
     setTestingSample(null);
   };
@@ -322,18 +399,21 @@ export default function App() {
   const handleSaveNotificationConfig = (config: NotificationConfig) => {
     setNotificationConfig(config);
     saveNotificationConfig(config);
+    syncWithServer({ config });
   };
 
   // Handler: Save Users (Admin)
   const handleSaveUsers = (updatedUsers: User[]) => {
     setUsers(updatedUsers);
     saveUsers(updatedUsers);
+    syncWithServer({ users: updatedUsers });
   };
 
   // Handler: Save Stations (Admin)
   const handleSaveStations = (updatedStations: Station[]) => {
     setStations(updatedStations);
     saveStations(updatedStations);
+    syncWithServer({ stations: updatedStations });
   };
 
   // Handler: Import Full State (Backup Restore)
@@ -501,6 +581,7 @@ export default function App() {
           <SampleList
             samples={samples}
             stations={stations}
+            currentUser={currentUser}
             selectedStationId={selectedStationId}
             onAddNew={handleOpenAddForm}
             onEdit={handleOpenEditForm}
@@ -521,6 +602,7 @@ export default function App() {
           <CalendarView
             samples={samples}
             stations={stations}
+            currentUser={currentUser}
             selectedStationId={selectedStationId}
             onSelectSampleDetail={handleOpenDetailModal}
             onSelectSampleForTest={handleOpenTestModal}
@@ -553,7 +635,9 @@ export default function App() {
                 notes: '',
                 status: 'due_today',
                 createdAt: new Date().toISOString(),
-                updatedAt: new Date().toISOString()
+                updatedAt: new Date().toISOString(),
+                createdBy: currentUser.username,
+                createdByName: currentUser.fullName,
               });
               setIsFormModalOpen(true);
             }}
@@ -679,10 +763,10 @@ export default function App() {
           setIsFormModalOpen(false);
           setEditingSample(null);
         }}
-        initialSample={editingSample}
+        editingSample={editingSample}
         stations={stations}
         onSave={handleSaveSample}
-        currentUserName={currentUser.fullName}
+        currentUser={currentUser}
       />
 
       {/* 2. Test Result Entry Modal */}
@@ -707,6 +791,7 @@ export default function App() {
         sample={detailSample}
         stations={stations}
         allSamples={samples}
+        currentUser={currentUser}
         onOpenTestModal={handleOpenTestModal}
         onOpenEditModal={handleOpenEditForm}
         onSendNotification={(sample) => {

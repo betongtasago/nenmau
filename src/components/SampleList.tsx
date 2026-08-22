@@ -78,6 +78,41 @@ export const SampleList: React.FC<SampleListProps> = ({
   const handleNotify = onOpenNotification || onSendSingleNotification || (() => {});
   const handleExport = onExportExcel || (() => {});
 
+  // Permission check helper: Admin can modify everything; Members can only modify their own samples or samples of their assigned station
+  const canModifySample = (sample: ConcreteSample) => {
+    if (!currentUser) return true;
+    if (currentUser.role === 'admin') return true;
+    // Check if member created this sample or matches username / creator name
+    if (sample.createdBy && sample.createdBy === currentUser.username) return true;
+    if (sample.samplerName && sample.samplerName.trim().toLowerCase() === currentUser.fullName.trim().toLowerCase()) return true;
+    // If not created by member, member cannot edit other members' samples
+    return false;
+  };
+
+  const handleGuardedEdit = (sample: ConcreteSample) => {
+    if (!canModifySample(sample)) {
+      alert(`⚠️ Bạn không có quyền chỉnh sửa mẫu của thành viên khác (${sample.createdByName || sample.samplerName || 'Thành viên khác'}). Chỉ Quản Trị Viên (Admin) hoặc người tạo mẫu mới có quyền chỉnh sửa.`);
+      return;
+    }
+    handleEdit(sample);
+  };
+
+  const handleGuardedDelete = (sample: ConcreteSample) => {
+    if (!canModifySample(sample)) {
+      alert(`⚠️ Bạn không có quyền xóa mẫu của thành viên khác (${sample.createdByName || sample.samplerName || 'Thành viên khác'}). Chỉ Quản Trị Viên (Admin) hoặc người tạo mẫu mới có quyền xóa.`);
+      return;
+    }
+    handleDelete(sample.id);
+  };
+
+  const handleGuardedTest = (sample: ConcreteSample) => {
+    if (!canModifySample(sample) && currentUser?.role !== 'admin') {
+      alert(`⚠️ Bạn không có quyền nhập kết quả cho mẫu của thành viên khác (${sample.createdByName || sample.samplerName || 'Thành viên khác'}).`);
+      return;
+    }
+    handleTest(sample);
+  };
+
   const stationMap = useMemo(() => {
     const map = new Map<string, Station>();
     stations.forEach(s => map.set(s.id, s));
@@ -387,7 +422,7 @@ export const SampleList: React.FC<SampleListProps> = ({
 
                   {!isTested && (
                     <button
-                      onClick={() => handleTest(sample)}
+                      onClick={() => handleGuardedTest(sample)}
                       className="flex-1 py-1.5 px-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-bold flex items-center justify-center gap-1 transition-colors cursor-pointer shadow-xs"
                     >
                       <FlaskConical className="w-3.5 h-3.5" />
@@ -411,21 +446,32 @@ export const SampleList: React.FC<SampleListProps> = ({
                     <Printer className="w-4 h-4 text-slate-600" />
                   </button>
 
-                  <button
-                    onClick={() => handleEdit(sample)}
-                    className="p-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg cursor-pointer transition-colors"
-                    title="Sửa"
-                  >
-                    <Edit3 className="w-4 h-4 text-amber-600" />
-                  </button>
+                  {canModifySample(sample) ? (
+                    <>
+                      <button
+                        onClick={() => handleGuardedEdit(sample)}
+                        className="p-1.5 bg-slate-100 hover:bg-amber-50 text-slate-700 hover:text-amber-700 rounded-lg cursor-pointer transition-colors"
+                        title="Sửa thông tin mẫu"
+                      >
+                        <Edit3 className="w-4 h-4 text-amber-600" />
+                      </button>
 
-                  <button
-                    onClick={() => handleDelete(sample.id)}
-                    className="p-1.5 bg-slate-100 hover:bg-red-50 text-slate-400 hover:text-red-600 rounded-lg cursor-pointer transition-colors"
-                    title="Xóa"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
+                      <button
+                        onClick={() => handleGuardedDelete(sample)}
+                        className="p-1.5 bg-slate-100 hover:bg-red-50 text-slate-400 hover:text-red-600 rounded-lg cursor-pointer transition-colors"
+                        title="Xóa mẫu"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </>
+                  ) : (
+                    <span 
+                      className="p-1.5 text-slate-300 cursor-not-allowed text-[11px] font-medium"
+                      title={`Mẫu do ${sample.createdByName || sample.samplerName || 'thành viên khác'} tạo`}
+                    >
+                      🔒 Chỉ xem
+                    </span>
+                  )}
                 </div>
 
               </div>
@@ -574,20 +620,31 @@ export const SampleList: React.FC<SampleListProps> = ({
                         >
                           <Printer className="w-4 h-4 text-slate-600" />
                         </button>
-                        <button
-                          onClick={() => handleEdit(sample)}
-                          className="p-1.5 text-slate-500 hover:text-amber-700 hover:bg-amber-50 rounded transition-colors cursor-pointer"
-                          title="Chỉnh Sửa"
-                        >
-                          <Edit3 className="w-4 h-4 text-amber-600" />
-                        </button>
-                        <button
-                          onClick={() => handleDelete(sample.id)}
-                          className="p-1.5 text-slate-400 hover:text-red-700 hover:bg-red-50 rounded transition-colors cursor-pointer"
-                          title="Xóa"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
+                        {canModifySample(sample) ? (
+                          <>
+                            <button
+                              onClick={() => handleGuardedEdit(sample)}
+                              className="p-1.5 text-slate-500 hover:text-amber-700 hover:bg-amber-50 rounded transition-colors cursor-pointer"
+                              title="Chỉnh Sửa Thông Tin Mẫu"
+                            >
+                              <Edit3 className="w-4 h-4 text-amber-600" />
+                            </button>
+                            <button
+                              onClick={() => handleGuardedDelete(sample)}
+                              className="p-1.5 text-slate-400 hover:text-red-700 hover:bg-red-50 rounded transition-colors cursor-pointer"
+                              title="Xóa Mẫu"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </>
+                        ) : (
+                          <span 
+                            className="inline-block px-2 py-1 text-slate-400 bg-slate-100 rounded text-[11px] font-medium cursor-not-allowed"
+                            title={`Mẫu do ${sample.createdByName || sample.samplerName || 'thành viên khác'} tạo. Bạn chỉ có quyền xem.`}
+                          >
+                            🔒 Chỉ Xem
+                          </span>
+                        )}
                       </td>
                     </tr>
                   );

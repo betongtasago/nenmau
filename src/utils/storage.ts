@@ -115,16 +115,14 @@ export function getStoredUsers(): User[] {
       return INITIAL_USERS;
     }
     const parsed: User[] = JSON.parse(raw);
-    // Filter out obsolete hardcoded dummy accounts
-    const filtered = parsed.filter(u => 
-      u.username === 'admin' || 
-      (u.id !== 'usr_hocmon' && u.id !== 'usr_xuyena' && u.id !== 'usr_hoaan' && u.id !== 'usr_tnt1' && u.id !== 'usr_tnt2' && u.id !== 'usr_lab')
-    );
-    if (filtered.length === 0 || !filtered.some(u => u.username === 'admin')) {
-      localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(INITIAL_USERS));
-      return INITIAL_USERS;
+    // Ensure admin user exists in list
+    const hasAdmin = parsed.some(u => u.username === 'admin');
+    if (!hasAdmin) {
+      const merged = [...INITIAL_USERS, ...parsed];
+      localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(merged));
+      return merged;
     }
-    return filtered;
+    return parsed;
   } catch (e) {
     console.error('Failed to parse stored users:', e);
     return INITIAL_USERS;

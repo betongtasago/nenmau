@@ -12,6 +12,7 @@ const __dirname = path.dirname(__filename);
 interface ServerState {
   samples: any[];
   stations: any[];
+  users: any[];
   config: {
     autoEmailEnabled?: boolean;
     autoZaloEnabled?: boolean;
@@ -42,7 +43,9 @@ function loadPersistedState(): ServerState {
   try {
     if (fs.existsSync(stateFilePath)) {
       const raw = fs.readFileSync(stateFilePath, 'utf8');
-      return JSON.parse(raw);
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed.users)) parsed.users = [];
+      return parsed;
     }
   } catch (e) {
     console.warn('Could not load server-state.json, using defaults:', e);
@@ -50,6 +53,7 @@ function loadPersistedState(): ServerState {
   return {
     samples: [],
     stations: [],
+    users: [],
     config: {
       autoEmailEnabled: true,
       autoZaloEnabled: true,
@@ -322,12 +326,85 @@ async function startServer() {
     });
   });
 
-  // 1. Sync State from Frontend to Server (Samples, Stations, Notification Config)
+  // 1. Sync & Data Endpoints
+  // Get all users
+  app.get('/api/users', (req, res) => {
+    return res.json({ success: true, users: (serverState as any).users || [] });
+  });
+
+  // Save/Update users
+  app.post('/api/users', (req, res) => {
+    try {
+      const { users } = req.body;
+      if (Array.isArray(users)) {
+        (serverState as any).users = users;
+        savePersistedState(serverState);
+        return res.json({ success: true, count: users.length });
+      }
+      return res.status(400).json({ success: false, message: 'Invalid users array' });
+    } catch (e: any) {
+      return res.status(500).json({ success: false, message: e.message });
+    }
+  });
+
+  // Get all samples
+  app.get('/api/samples', (req, res) => {
+    return res.json({ success: true, samples: serverState.samples || [] });
+  });
+
+  // Save/Update samples
+  app.post('/api/samples', (req, res) => {
+    try {
+      const { samples } = req.body;
+      if (Array.isArray(samples)) {
+        serverState.samples = samples;
+        savePersistedState(serverState);
+        return res.json({ success: true, count: samples.length });
+      }
+      return res.status(400).json({ success: false, message: 'Invalid samples array' });
+    } catch (e: any) {
+      return res.status(500).json({ success: false, message: e.message });
+    }
+  });
+
+  // Get all stations
+  app.get('/api/stations', (req, res) => {
+    return res.json({ success: true, stations: serverState.stations || [] });
+  });
+
+  // Save/Update stations
+  app.post('/api/stations', (req, res) => {
+    try {
+      const { stations } = req.body;
+      if (Array.isArray(stations)) {
+        serverState.stations = stations;
+        savePersistedState(serverState);
+        return res.json({ success: true, count: stations.length });
+      }
+      return res.status(400).json({ success: false, message: 'Invalid stations array' });
+    } catch (e: any) {
+      return res.status(500).json({ success: false, message: e.message });
+    }
+  });
+
+  // State Fetch / Sync Endpoint
+  app.get('/api/server-sync', (req, res) => {
+    return res.json({
+      success: true,
+      users: (serverState as any).users || [],
+      samples: serverState.samples || [],
+      stations: serverState.stations || [],
+      config: serverState.config
+    });
+  });
+
+  // 1. Sync State from Frontend to Server (Samples, Stations, Notification Config, Users)
   app.post('/api/server-sync', (req, res) => {
     try {
-      const { samples, stations, config } = req.body;
+      const { samples, stations, config, users } = req.body;
       if (Array.isArray(samples)) serverState.samples = samples;
       if (Array.isArray(stations)) serverState.stations = stations;
+      if (Array.isArray(users)) (serverState as any).users = users;
       if (config && typeof config === 'object') {
         serverState.config = { ...serverState.config, ...config };
       }
@@ -335,8 +412,11 @@ async function startServer() {
 
       return res.status(200).json({
         success: true,
-        message: `Đồng bộ máy chủ thành công! (${serverState.samples.length} mẫu bê tông, ${serverState.stations.length} trạm trộn, ${serverState.config.emailRecipients?.length || 0} email nhận).`,
-        config: serverState.config
+        message: `Đồng bộ máy chủ thành công! (${serverState.samples.length} mẫu bê tông, ${serverState.stations.length} trạm trộn, ${((serverState as any).users || []).length} tài khoản).`,
+        config: serverState.config,
+        users: (serverState as any).users || [],
+        samples: serverState.samples,
+        stations: serverState.stations
       });
     } catch (e: any) {
       return res.status(500).json({ success: false, message: e.message });

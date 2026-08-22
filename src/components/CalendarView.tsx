@@ -21,12 +21,13 @@ import {
   Info,
   CalendarDays
 } from 'lucide-react';
-import { ConcreteSample, Station } from '../types';
+import { ConcreteSample, Station, User } from '../types';
 import { formatDateVN } from '../utils/storage';
 
 interface CalendarViewProps {
   samples: ConcreteSample[];
   stations: Station[];
+  currentUser?: User | null;
   selectedStationId: string;
   onSelectSampleDetail: (sample: ConcreteSample) => void;
   onSelectSampleForTest: (sample: ConcreteSample) => void;
@@ -39,6 +40,7 @@ interface CalendarViewProps {
 export const CalendarView: React.FC<CalendarViewProps> = ({
   samples,
   stations,
+  currentUser,
   selectedStationId,
   onSelectSampleDetail,
   onSelectSampleForTest,
@@ -157,7 +159,20 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
     }).length;
   }, [activeSamples, year, month]);
 
+  // Permission check helper
+  const canModifySample = (sample: ConcreteSample) => {
+    if (!currentUser) return true;
+    if (currentUser.role === 'admin') return true;
+    if (sample.createdBy && sample.createdBy === currentUser.username) return true;
+    if (sample.samplerName && sample.samplerName.trim().toLowerCase() === currentUser.fullName.trim().toLowerCase()) return true;
+    return false;
+  };
+
   const handleDeleteSchedule = (sample: ConcreteSample) => {
+    if (!canModifySample(sample)) {
+      alert(`⚠️ Bạn không có quyền xóa lịch nén của thành viên khác (${sample.createdByName || sample.samplerName || 'Thành viên khác'}). Chỉ Quản Trị Viên (Admin) hoặc người tạo mẫu mới có quyền xóa.`);
+      return;
+    }
     if (confirm(`Bạn có chắc muốn XÓA LỊCH NÉN của mẫu "${sample.projectName}" (${sample.concreteGrade} - Tuổi ${sample.ageType})?`)) {
       if (onDeleteSample) {
         onDeleteSample(sample.id);
