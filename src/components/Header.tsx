@@ -40,7 +40,6 @@ interface HeaderProps {
   onOpenNotificationModal: () => void;
   onOpenUserManagement: (tab?: 'users' | 'stations') => void;
   onOpenExportBackup: () => void;
-  onOpenMobileExportModal?: () => void;
   urgentCount: number;
   viewMode: ViewMode;
   onChangeViewMode: (mode: ViewMode) => void;
@@ -58,7 +57,6 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenNotificationModal,
   onOpenUserManagement,
   onOpenExportBackup,
-  onOpenMobileExportModal,
   urgentCount,
   viewMode,
   onChangeViewMode,
@@ -303,16 +301,6 @@ export const Header: React.FC<HeaderProps> = ({
                         <Download className="w-4 h-4 text-slate-600" />
                         <span>Sao Lưu Dữ Liệu & Hướng Dẫn</span>
                       </button>
-
-                      {onOpenMobileExportModal && (
-                        <button
-                          onClick={onOpenMobileExportModal}
-                          className="w-full text-left px-4 py-2 font-bold text-emerald-700 hover:bg-emerald-50 flex items-center gap-2 cursor-pointer border-t border-slate-100"
-                        >
-                          <Smartphone className="w-4 h-4 text-emerald-600" />
-                          <span>Xuất Bản Lên CH Play & App Store</span>
-                        </button>
-                      )}
                     </>
                   )}
 
@@ -367,17 +355,6 @@ export const Header: React.FC<HeaderProps> = ({
             <span className="hidden sm:inline">Zalo Bot & Email</span>
             <span className="sm:hidden">Thông Báo</span>
           </button>
-
-          {onOpenMobileExportModal && (
-            <button
-              onClick={onOpenMobileExportModal}
-              className="bg-emerald-50 hover:bg-emerald-100 text-emerald-800 px-3 py-1.5 rounded-lg border border-emerald-300 text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer shadow-xs"
-              title="Đóng gói & xuất bản lên CH Play & App Store"
-            >
-              <Smartphone className="w-3.5 h-3.5 text-emerald-600" />
-              <span>📱 Xuất App Mobile</span>
-            </button>
-          )}
 
           {currentUser?.role === 'admin' && (
             <button
@@ -476,20 +453,6 @@ export const Header: React.FC<HeaderProps> = ({
               <span>0942.320.923</span>
             </a>
           </div>
-
-          {/* Mobile Export App Button */}
-          {onOpenMobileExportModal && (
-            <button
-              onClick={() => {
-                onOpenMobileExportModal();
-                setMobileMenuOpen(false);
-              }}
-              className="w-full bg-emerald-700 hover:bg-emerald-600 text-white p-2.5 rounded-xl text-xs font-bold flex items-center justify-center gap-2 border border-emerald-500/40 shadow-xs cursor-pointer"
-            >
-              <Smartphone className="w-4 h-4 text-emerald-300" />
-              <span>📱 Đóng Gói App Di Động (CH Play & iOS)</span>
-            </button>
-          )}
 
           {currentUser?.role === 'admin' && (
             <div className="grid grid-cols-2 gap-2 pt-2 border-t border-emerald-800/80">
