@@ -1,6 +1,88 @@
 <!doctype html>
 <html lang="vi">
   <head>
+    <!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <title>Nén Mẫu - Bê Tông</title>
+    <!-- Nhúng CDN Supabase SDK -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+
+    <!-- 1. Form nhập dữ liệu -->
+    <h2>Thêm dữ liệu mới</h2>
+    <form id="dataForm">
+        <input type="text" id="author" placeholder="Tên của bạn" required />
+        <input type="text" id="content" placeholder="Nội dung nhập..." required />
+        <button type="submit">Gửi dữ liệu</button>
+    </form>
+
+    <hr>
+
+    <!-- 2. Nơi hiển thị danh sách dữ liệu cho tất cả Member & Admin xem -->
+    <h2>Danh sách dữ liệu đã lưu</h2>
+    <ul id="dataList">Đang tải dữ liệu...</ul>
+
+    <script>
+        // Cấu hình kết nối Supabase (Thay thông tin của bạn vào đây)
+        const SUPABASE_URL = 'https://mqzampgzppxeppyuqvxm.supabase.co';
+        const SUPABASE_ANON_KEY = 'sb_publishable_F2mi_z3hCcqnklwQTO_5IQ_vQMcRS0o';
+        const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+        // Hàm 1: Lấy dữ liệu từ Database và hiển thị ra màn hình khi F5
+        async function loadData() {
+            const listElement = document.getElementById('dataList');
+            
+            // Lấy tất cả dữ liệu từ bảng 'submissions', sắp xếp mới nhất lên đầu
+            const { data, error } = await supabase
+                .from('submissions')
+                .select('*')
+                .order('created_at', { ascending: false });
+
+            if (error) {
+                console.error('Lỗi lấy dữ liệu:', error);
+                listElement.innerHTML = '<li>Không thể tải dữ liệu</li>';
+                return;
+            }
+
+            // In dữ liệu ra màn hình
+            listElement.innerHTML = data.map(item => `
+                <li>
+                    <strong>${item.author}:</strong> ${item.content} 
+                    <small>(${new Date(item.created_at).toLocaleString('vi-VN')})</small>
+                </li>
+            `).join('');
+        }
+
+        // Hàm 2: Xử lý sự kiện khi nhấn nút Gửi (Thêm mới dữ liệu)
+        document.getElementById('dataForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const author = document.getElementById('author').value;
+            const content = document.getElementById('content').value;
+
+            // Đẩy dữ liệu lên bảng 'submissions'
+            const { error } = await supabase
+                .from('submissions')
+                .insert([{ author: author, content: content }]);
+
+            if (error) {
+                alert('Có lỗi xảy ra khi lưu!');
+                console.error(error);
+            } else {
+                alert('Đã lưu dữ liệu thành công!');
+                document.getElementById('dataForm').reset();
+                loadData(); // Tải lại danh sách sau khi thêm mới
+            }
+        });
+
+        // Tự động tải dữ liệu khi vừa mở trang hoặc F5
+        loadData();
+    </script>
+</body>
+</html>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
     <title>Quản Lý Tiến Độ Nén Mẫu Bê Tông - Tasago</title>
