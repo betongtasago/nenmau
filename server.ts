@@ -322,6 +322,20 @@ async function startServer() {
     next();
   });
 
+  // Set of active SSE (Server-Sent Events) clients for real-time instantaneous sync across all tabs & devices
+  const sseClients = new Set<express.Response>();
+
+  function broadcastSseEvent(eventData: any) {
+    const payload = `data: ${JSON.stringify(eventData)}\n\n`;
+    for (const client of sseClients) {
+      try {
+        client.write(payload);
+      } catch {
+        sseClients.delete(client);
+      }
+    }
+  }
+
   // Health check endpoint
   app.get('/api/health', (req, res) => {
     const vnTime = new Date().toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' });
@@ -330,12 +344,47 @@ async function startServer() {
       service: 'Tasago Concrete Testing Portal Backend',
       vietnamTime: vnTime,
       nodeVersion: process.version,
+      connectedClients: sseClients.size,
       cronStatus: {
         lastCronDate: serverState.lastCronDate,
         lastCronLog: serverState.lastCronLog,
         sampleCount: serverState.samples.length,
         recipients: serverState.config.emailRecipients
       }
+    });
+  });
+
+  // Real-time Server-Sent Events (SSE) stream for instant zero-latency multi-user sync
+  app.get('/api/events', (req, res) => {
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache, no-transform');
+    res.setHeader('Connection', 'keep-alive');
+    res.setHeader('X-Accel-Buffering', 'no');
+    res.flushHeaders();
+
+    // Send initial handshake
+    res.write(`data: ${JSON.stringify({ 
+      type: 'INIT_HANDSHAKE', 
+      timestamp: Date.now(), 
+      totalSamples: (serverState.samples || []).length,
+      totalStations: (serverState.stations || []).length,
+      serverTime: new Date().toISOString()
+    })}\n\n`);
+
+    sseClients.add(res);
+
+    const keepAlive = setInterval(() => {
+      try {
+        res.write(': ping\n\n');
+      } catch {
+        clearInterval(keepAlive);
+        sseClients.delete(res);
+      }
+    }, 15000);
+
+    req.on('close', () => {
+      clearInterval(keepAlive);
+      sseClients.delete(res);
     });
   });
 
@@ -364,6 +413,11 @@ async function startServer() {
       }
       
       savePersistedState(serverState);
+      broadcastSseEvent({
+        type: 'USERS_UPDATED',
+        users: (serverState as any).users,
+        timestamp: Date.now()
+      });
       return res.json({ success: true, users: (serverState as any).users });
     } catch (e: any) {
       return res.status(500).json({ success: false, message: e.message });
@@ -380,6 +434,11 @@ async function startServer() {
       currentUsers = currentUsers.filter((u: any) => u.id !== id && u.username !== 'admin');
       (serverState as any).users = currentUsers;
       savePersistedState(serverState);
+      broadcastSseEvent({
+        type: 'USERS_UPDATED',
+        users: currentUsers,
+        timestamp: Date.now()
+      });
       return res.json({ success: true, users: currentUsers });
     } catch (e: any) {
       return res.status(500).json({ success: false, message: e.message });
@@ -394,15 +453,18 @@ async function startServer() {
   // Save/Update a single sample or list of samples (Upsert without losing other users' data)
   app.post('/api/samples/save', (req, res) => {
     try {
-      const { sample, samples } = req.body;
+      const { sample, samples, actionBy } = req.body;
       let currentSamples = [...(serverState.samples || [])];
+      let savedSampleResult: any = null;
 
       if (sample && typeof sample === 'object' && sample.id) {
         const idx = currentSamples.findIndex((s: any) => s.id === sample.id);
         if (idx >= 0) {
           currentSamples[idx] = { ...currentSamples[idx], ...sample, updatedAt: new Date().toISOString() };
+          savedSampleResult = currentSamples[idx];
         } else {
           currentSamples = [sample, ...currentSamples];
+          savedSampleResult = sample;
         }
         serverState.samples = currentSamples;
       } else if (Array.isArray(samples)) {
@@ -420,10 +482,22 @@ async function startServer() {
       }
 
       savePersistedState(serverState);
+
+      // Instant Real-time Push to all connected Admin and Member screens
+      broadcastSseEvent({
+        type: 'SAMPLE_SAVED',
+        sample: savedSampleResult || sample,
+        samples: serverState.samples,
+        actionBy: actionBy || sample?.createdByName || sample?.samplerName || 'Thành viên trạm',
+        stationId: sample?.stationId,
+        timestamp: Date.now()
+      });
+
       return res.json({ 
         success: true, 
         message: 'Đã lưu mẫu bê tông lên máy chủ trung tâm thành công', 
-        samples: serverState.samples 
+        samples: serverState.samples,
+        sample: savedSampleResult || sample
       });
     } catch (e: any) {
       return res.status(500).json({ success: false, message: e.message });
@@ -437,6 +511,14 @@ async function startServer() {
       if (!id) return res.status(400).json({ success: false, message: 'Missing sample ID' });
       serverState.samples = (serverState.samples || []).filter((s: any) => s.id !== id);
       savePersistedState(serverState);
+
+      broadcastSseEvent({
+        type: 'SAMPLE_DELETED',
+        sampleId: id,
+        samples: serverState.samples,
+        timestamp: Date.now()
+      });
+
       return res.json({ 
         success: true, 
         message: 'Đã xóa mẫu bê tông khỏi máy chủ trung tâm', 
@@ -454,6 +536,11 @@ async function startServer() {
       if (Array.isArray(samples)) {
         serverState.samples = samples;
         savePersistedState(serverState);
+        broadcastSseEvent({
+          type: 'SAMPLES_SYNCED',
+          samples: serverState.samples,
+          timestamp: Date.now()
+        });
         return res.json({ success: true, count: samples.length, samples: serverState.samples });
       }
       return res.status(400).json({ success: false, message: 'Invalid samples array' });
@@ -484,6 +571,11 @@ async function startServer() {
         serverState.stations = stations;
       }
       savePersistedState(serverState);
+      broadcastSseEvent({
+        type: 'STATIONS_UPDATED',
+        stations: serverState.stations,
+        timestamp: Date.now()
+      });
       return res.json({ success: true, count: serverState.stations.length, stations: serverState.stations });
     } catch (e: any) {
       return res.status(500).json({ success: false, message: e.message });
@@ -570,6 +662,15 @@ async function startServer() {
       }
 
       savePersistedState(serverState);
+
+      broadcastSseEvent({
+        type: 'FULL_SYNC',
+        samples: serverState.samples,
+        stations: serverState.stations,
+        users: (serverState as any).users,
+        config: serverState.config,
+        timestamp: Date.now()
+      });
 
       return res.status(200).json({
         success: true,

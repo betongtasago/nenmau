@@ -47,6 +47,7 @@ interface HeaderProps {
   onManualSync?: () => void;
   isSyncing?: boolean;
   lastSyncedAt?: Date;
+  sseConnected?: boolean;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -67,6 +68,7 @@ export const Header: React.FC<HeaderProps> = ({
   onManualSync,
   isSyncing = false,
   lastSyncedAt,
+  sseConnected = true,
 }) => {
   const [userDropdownOpen, setUserDropdownOpen] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -368,14 +370,18 @@ export const Header: React.FC<HeaderProps> = ({
             <button
               onClick={onManualSync}
               disabled={isSyncing}
-              className="bg-slate-100 hover:bg-emerald-50 text-slate-700 hover:text-emerald-800 px-2.5 py-1.5 rounded-lg border border-slate-200 hover:border-emerald-300 text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer shadow-2xs"
-              title="Đồng bộ ngay với máy chủ trung tâm"
+              className={`px-2.5 py-1.5 rounded-lg border text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer shadow-2xs ${
+                sseConnected 
+                  ? 'bg-emerald-50 text-emerald-800 border-emerald-300 hover:bg-emerald-100' 
+                  : 'bg-slate-100 text-slate-700 border-slate-200 hover:bg-slate-200'
+              }`}
+              title={`Máy chủ trung tâm: ${sseConnected ? 'Đang kết nối Realtime trực tuyến (SSE)' : 'Đang kết nối lại...'}. Nhấn để làm mới ngay. Lần đồng bộ gần nhất: ${lastSyncedAt ? lastSyncedAt.toLocaleTimeString('vi-VN') : 'vừa xong'}`}
             >
-              <RefreshCw className={`w-3.5 h-3.5 text-emerald-600 ${isSyncing ? 'animate-spin' : ''}`} />
+              <RefreshCw className={`w-3.5 h-3.5 ${sseConnected ? 'text-emerald-600' : 'text-slate-500'} ${isSyncing ? 'animate-spin' : ''}`} />
               <span className="hidden lg:inline">
-                {isSyncing ? 'Đang đồng bộ...' : 'Đồng bộ Realtime'}
+                {isSyncing ? 'Đang tải...' : sseConnected ? 'Đồng bộ Realtime' : 'Đang kết nối...'}
               </span>
-              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse hidden sm:inline" />
+              <span className={`w-2 h-2 rounded-full ${sseConnected ? 'bg-emerald-500 animate-pulse' : 'bg-amber-400'} hidden sm:inline`} />
             </button>
           )}
 

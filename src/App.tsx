@@ -99,6 +99,7 @@ export default function App() {
   const [showAutoAlertBanner, setShowAutoAlertBanner] = useState(true);
   const [isSyncing, setIsSyncing] = useState(false);
   const [lastSyncedAt, setLastSyncedAt] = useState<Date>(new Date());
+  const [sseConnected, setSseConnected] = useState<boolean>(true);
   const [newScheduleToast, setNewScheduleToast] = useState<{
     id: string;
     sampleCode: string;
@@ -146,25 +147,6 @@ export default function App() {
         if (data.samples && Array.isArray(data.samples) && data.samples.length > 0) {
           const recalced = recalculateSampleStatuses(data.samples);
           setSamples(prev => {
-            // Check if there are newly added samples not previously in state
-            const prevIds = new Set(prev.map(s => s.id));
-            const newSamples = recalced.filter(s => !prevIds.has(s.id));
-            if (newSamples.length > 0 && prev.length > 0) {
-              const newest = newSamples[0];
-              // If created by another user or system, alert the current user
-              if (currentUser && newest.createdBy !== currentUser.username) {
-                const targetStation = data.stations?.find((st: Station) => st.id === newest.stationId)?.name || 'Trạm Tasago';
-                setNewScheduleToast({
-                  id: newest.id,
-                  sampleCode: newest.sampleCode,
-                  projectName: newest.projectName,
-                  scheduledTestDate: newest.scheduledTestDate,
-                  createdByName: newest.createdByName || newest.samplerName || 'Thành viên trạm',
-                  stationName: targetStation.replace('Trạm Tasago ', ''),
-                });
-              }
-            }
-
             if (JSON.stringify(prev) !== JSON.stringify(recalced)) {
               saveSamples(recalced);
               return recalced;
@@ -200,9 +182,136 @@ export default function App() {
         setTimeout(() => setIsSyncing(false), 400);
       }
     }
-  }, [currentUser]);
+  }, []);
 
-  // Real-time broadcast channel for multi-tab zero-latency sync
+  // Real-time Server-Sent Events (SSE) listener for instantaneous zero-latency sync across all devices
+  useEffect(() => {
+    let eventSource: EventSource | null = null;
+    let reconnectTimer: any = null;
+
+    function connectSSE() {
+      try {
+        if (typeof window === 'undefined' || !('EventSource' in window)) return;
+        eventSource = new EventSource('/api/events');
+
+        eventSource.onopen = () => {
+          setSseConnected(true);
+          setLastSyncedAt(new Date());
+          fetchServerSync();
+        };
+
+        eventSource.onmessage = (e) => {
+          if (!e.data || e.data.startsWith(':')) return;
+          try {
+            const data = JSON.parse(e.data);
+            setLastSyncedAt(new Date());
+
+            if (data.type === 'SAMPLE_SAVED') {
+              if (data.samples && Array.isArray(data.samples)) {
+                const recalced = recalculateSampleStatuses(data.samples);
+                setSamples(recalced);
+                saveSamples(recalced);
+              }
+
+              // Check if notification toast should be shown
+              if (data.sample) {
+                const s = data.sample;
+                if (currentUser && s.createdBy !== currentUser.username) {
+                  const targetStation = stations.find(st => st.id === s.stationId)?.name || 'Trạm Tasago';
+                  const sender = data.actionBy || s.createdByName || s.samplerName || 'Thành viên trạm';
+                  setNewScheduleToast({
+                    id: s.id,
+                    sampleCode: s.sampleCode,
+                    projectName: s.projectName,
+                    scheduledTestDate: s.scheduledTestDate,
+                    createdByName: sender,
+                    stationName: targetStation.replace('Trạm Tasago ', ''),
+                  });
+                  playAlertChime();
+
+                  // Web Push notification
+                  if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
+                    try {
+                      new Notification(`[TASAGO] Lịch Nén Mẫu Mới - ${targetStation}`, {
+                        body: `KTV ${sender} vừa tạo lịch nén ngày ${s.scheduledTestDate?.split('-').reverse().join('/')} cho "${s.projectName}"`,
+                        icon: '/favicon.ico'
+                      });
+                    } catch {}
+                  }
+                }
+              }
+            } else if (data.type === 'SAMPLE_DELETED') {
+              if (data.samples && Array.isArray(data.samples)) {
+                const recalced = recalculateSampleStatuses(data.samples);
+                setSamples(recalced);
+                saveSamples(recalced);
+              } else if (data.sampleId) {
+                setSamples(prev => {
+                  const filtered = prev.filter(s => s.id !== data.sampleId);
+                  saveSamples(filtered);
+                  return filtered;
+                });
+              }
+            } else if (data.type === 'SAMPLES_SYNCED') {
+              if (data.samples && Array.isArray(data.samples)) {
+                const recalced = recalculateSampleStatuses(data.samples);
+                setSamples(recalced);
+                saveSamples(recalced);
+              }
+            } else if (data.type === 'USERS_UPDATED') {
+              if (data.users && Array.isArray(data.users)) {
+                setUsers(data.users);
+                saveUsers(data.users);
+              }
+            } else if (data.type === 'STATIONS_UPDATED') {
+              if (data.stations && Array.isArray(data.stations)) {
+                setStations(data.stations);
+                saveStations(data.stations);
+              }
+            } else if (data.type === 'FULL_SYNC') {
+              if (data.samples && Array.isArray(data.samples)) {
+                const recalced = recalculateSampleStatuses(data.samples);
+                setSamples(recalced);
+                saveSamples(recalced);
+              }
+              if (data.stations && Array.isArray(data.stations)) {
+                setStations(data.stations);
+                saveStations(data.stations);
+              }
+              if (data.users && Array.isArray(data.users)) {
+                setUsers(data.users);
+                saveUsers(data.users);
+              }
+              if (data.config && typeof data.config === 'object') {
+                setNotificationConfig(data.config);
+                saveNotificationConfig(data.config);
+              }
+            }
+          } catch (err) {
+            console.error('Lỗi phân tích gói tin SSE:', err);
+          }
+        };
+
+        eventSource.onerror = () => {
+          setSseConnected(false);
+          eventSource?.close();
+          clearTimeout(reconnectTimer);
+          reconnectTimer = setTimeout(connectSSE, 3000);
+        };
+      } catch {
+        setSseConnected(false);
+      }
+    }
+
+    connectSSE();
+
+    return () => {
+      clearTimeout(reconnectTimer);
+      eventSource?.close();
+    };
+  }, [currentUser, stations, fetchServerSync]);
+
+  // Real-time broadcast channel for multi-tab zero-latency sync on same machine
   useEffect(() => {
     let channel: BroadcastChannel | null = null;
     try {
@@ -219,7 +328,7 @@ export default function App() {
     }
 
     const handleStorageChange = (e: StorageEvent) => {
-      if (e.key === 'tasago_concrete_samples_v2' || e.key === 'tasago_stations_v2') {
+      if (e.key === 'tasago_samples_v3' || e.key === 'tasago_stations_v3') {
         fetchServerSync();
       }
     };
@@ -238,9 +347,9 @@ export default function App() {
     };
   }, [fetchServerSync]);
 
-  // Initial load from server and periodic polling for real-time multi-device sync
+  // Initial load from server and periodic fallback polling
   useEffect(() => {
-    // 1. First fetch latest state from central server
+    // 1. Initial fetch from server
     fetchServerSync();
 
     // 2. Automated background notification check
@@ -248,17 +357,17 @@ export default function App() {
       checkAndTriggerAutoNotifications(samples, stations, notificationConfig).catch(console.error);
     }
 
-    // 3. Interval check every 3.5 seconds for instant multi-user synchronization & notifications
+    // 3. Interval check every 8 seconds as secondary fallback
     const timer = setInterval(() => {
       fetchServerSync();
       const currentSamples = recalculateSampleStatuses(loadSamples());
       if (currentUser) {
         checkAndTriggerAutoNotifications(currentSamples, stations, notificationConfig).catch(console.error);
       }
-    }, 3500);
+    }, 8000);
 
     return () => clearInterval(timer);
-  }, [currentUser]);
+  }, [currentUser, fetchServerSync]);
 
   const handleRequestPushPermission = async () => {
     const granted = await requestBrowserNotificationPermission();
@@ -353,7 +462,10 @@ export default function App() {
       const res = await fetch('/api/samples/save', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sample: savedSample })
+        body: JSON.stringify({ 
+          sample: savedSample,
+          actionBy: currentUser?.fullName || currentUser?.username || 'KTV Tasago'
+        })
       });
       if (res.ok) {
         const data = await res.json();
@@ -380,7 +492,10 @@ export default function App() {
         const res = await fetch('/api/samples/delete', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ id })
+          body: JSON.stringify({ 
+            id,
+            actionBy: currentUser?.fullName || currentUser?.username 
+          })
         });
         if (res.ok) {
           const data = await res.json();
@@ -407,7 +522,10 @@ export default function App() {
       const res = await fetch('/api/samples/delete', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id })
+        body: JSON.stringify({ 
+          id,
+          actionBy: currentUser?.fullName || currentUser?.username 
+        })
       });
       if (res.ok) {
         const data = await res.json();
@@ -474,7 +592,10 @@ export default function App() {
         const res = await fetch('/api/samples/save', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ sample: updatedTargetSample })
+          body: JSON.stringify({ 
+            sample: updatedTargetSample,
+            actionBy: currentUser?.fullName || currentUser?.username 
+          })
         });
         if (res.ok) {
           const data = await res.json();
@@ -518,7 +639,10 @@ export default function App() {
         const res = await fetch('/api/samples/save', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ sample: updatedTargetSample })
+          body: JSON.stringify({ 
+            sample: updatedTargetSample,
+            actionBy: currentUser?.fullName || currentUser?.username 
+          })
         });
         if (res.ok) {
           const data = await res.json();
@@ -694,6 +818,7 @@ export default function App() {
         onManualSync={() => fetchServerSync(true)}
         isSyncing={isSyncing}
         lastSyncedAt={lastSyncedAt}
+        sseConnected={sseConnected}
       />
 
       {/* Real-time Toast Notification when a member creates a new schedule */}
@@ -722,12 +847,31 @@ export default function App() {
                 <button
                   type="button"
                   onClick={() => {
+                    setSelectedStationId('all');
                     setActiveTab('calendar');
                     setNewScheduleToast(null);
                   }}
                   className="bg-emerald-700 hover:bg-emerald-600 text-white text-xs font-bold px-3 py-1.5 rounded-xl transition-colors cursor-pointer shadow-xs"
                 >
                   Xem Trên Lịch Nén
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const found = samples.find(s => s.id === newScheduleToast.id);
+                    if (found) {
+                      setSelectedStationId('all');
+                      setDetailSample(found);
+                      setIsDetailModalOpen(true);
+                    } else {
+                      setSelectedStationId('all');
+                      setActiveTab('samples');
+                    }
+                    setNewScheduleToast(null);
+                  }}
+                  className="bg-emerald-100 hover:bg-emerald-200 text-emerald-900 text-xs font-bold px-3 py-1.5 rounded-xl transition-colors cursor-pointer"
+                >
+                  Chi Tiết Mẫu
                 </button>
                 <button
                   type="button"
@@ -740,7 +884,7 @@ export default function App() {
             </div>
             <button
               onClick={() => setNewScheduleToast(null)}
-              className="text-slate-400 hover:text-slate-600 p-1"
+              className="text-slate-400 hover:text-slate-600 p-1 cursor-pointer"
             >
               <X className="w-4 h-4" />
             </button>
