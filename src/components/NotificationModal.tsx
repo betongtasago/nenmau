@@ -21,13 +21,23 @@ import {
   AlertCircle,
   ExternalLink,
   ShieldCheck,
-  RefreshCw
+  RefreshCw,
+  Phone,
+  Smartphone,
+  Users,
+  UserCheck,
+  FileCode,
+  Trash2,
+  Share2
 } from 'lucide-react';
 import { ConcreteSample, Station, NotificationConfig, NotificationLog, User } from '../types';
 import { 
   generateSampleNotification, 
   dispatchNotification,
-  generateMailtoUrl
+  generateMailtoUrl,
+  openZaloPersonalChat,
+  cleanPhoneNumber,
+  GOOGLE_APPS_SCRIPT_ZALO_TEMPLATE
 } from '../utils/notificationService';
 import { formatDateVN } from '../utils/storage';
 
@@ -57,6 +67,7 @@ export const NotificationModal: React.FC<NotificationModalProps> = ({
   const [activeTab, setActiveTab] = useState<'send' | 'email' | 'zalo' | 'preview' | 'logs' | 'guide'>('email');
   const [channel, setChannel] = useState<'zalo_bot' | 'email' | 'both'>('email');
   const [copied, setCopied] = useState(false);
+  const [copiedScript, setCopiedScript] = useState(false);
   const [sending, setSending] = useState(false);
   const [sendSuccessMessage, setSendSuccessMessage] = useState('');
 
@@ -93,13 +104,23 @@ export const NotificationModal: React.FC<NotificationModalProps> = ({
   const [triggeringCron, setTriggeringCron] = useState(false);
   const [cronTriggerResult, setCronTriggerResult] = useState<{ success: boolean; message: string } | null>(null);
 
-  // Zalo Bot Settings
+  // Zalo Bot Settings (Personal & Group)
   const [zaloWebhookUrl, setZaloWebhookUrl] = useState(config.zaloWebhookUrl || '');
   const [zaloBotToken, setZaloBotToken] = useState(config.zaloBotToken || '');
   const [zaloGroupId, setZaloGroupId] = useState(config.zaloGroupId || 'Nhóm Kỹ Thuật Tasago');
+  const [zaloPersonalPhone, setZaloPersonalPhone] = useState(config.zaloPersonalPhone || '0942320923');
+  const [zaloPersonalPhones, setZaloPersonalPhones] = useState<string[]>(() => {
+    const list = Array.isArray(config.zaloPersonalPhones) ? config.zaloPersonalPhones : [];
+    return list.length > 0 ? list : ['0942320923', '0913999888'];
+  });
+  const [newPhoneInput, setNewPhoneInput] = useState('');
+  const [zaloRecipientType, setZaloRecipientType] = useState<'personal' | 'group' | 'both'>(
+    config.zaloRecipientType || 'both'
+  );
   const [autoZaloEnabled, setAutoZaloEnabled] = useState(config.autoZaloEnabled ?? true);
   const [testingWebhook, setTestingWebhook] = useState(false);
   const [webhookTestResult, setWebhookTestResult] = useState<{ success: boolean; message: string } | null>(null);
+  const [showScriptModal, setShowScriptModal] = useState(false);
 
   // Sample Selection
   const urgentSamples = samples.filter(s => s.status === 'due_today' || s.status === 'overdue');
@@ -115,6 +136,31 @@ export const NotificationModal: React.FC<NotificationModalProps> = ({
   const mailtoUrl = generateMailtoUrl(emailList, notificationPreview.title, notificationPreview.bodyText);
 
   if (!isOpen) return null;
+
+  // Add Phone Number to personal list
+  const handleAddPhone = (e: React.FormEvent) => {
+    e.preventDefault();
+    const clean = cleanPhoneNumber(newPhoneInput);
+    if (!clean || clean.length < 9) {
+      alert('Vui lòng nhập số điện thoại hợp lệ (ví dụ: 0942320923)');
+      return;
+    }
+    if (zaloPersonalPhones.includes(clean)) {
+      alert('Số điện thoại này đã có trong danh sách nhận Zalo.');
+      return;
+    }
+    setZaloPersonalPhones(prev => [...prev, clean]);
+    if (!zaloPersonalPhone) setZaloPersonalPhone(clean);
+    setNewPhoneInput('');
+  };
+
+  const handleDeletePhone = (phoneToDelete: string) => {
+    setZaloPersonalPhones(prev => prev.filter(p => p !== phoneToDelete));
+    if (zaloPersonalPhone === phoneToDelete) {
+      const remaining = zaloPersonalPhones.filter(p => p !== phoneToDelete);
+      setZaloPersonalPhone(remaining[0] || '');
+    }
+  };
 
   // Apply Default Gmail Preset (smtp.gmail.com, Port 587 STARTTLS, tasagotnt@gmail.com)
   const handleApplyGmailPreset = () => {
@@ -170,6 +216,9 @@ export const NotificationModal: React.FC<NotificationModalProps> = ({
     zaloWebhookUrl,
     zaloBotToken,
     zaloGroupId,
+    zaloPersonalPhone,
+    zaloPersonalPhones,
+    zaloRecipientType,
     autoZaloEnabled,
   });
 
@@ -192,7 +241,7 @@ export const NotificationModal: React.FC<NotificationModalProps> = ({
       console.warn('Backend sync notice:', e);
     }
 
-    alert('✅ Đã lưu cấu hình máy chủ gửi Email và lịch tự động 07:00 Sáng thành công!');
+    alert('✅ Đã lưu cấu hình máy chủ gửi Email & Bot Zalo cá nhân / nhóm thành công!');
   };
 
   // 1. Verify SMTP Connection via Backend
@@ -349,7 +398,7 @@ export const NotificationModal: React.FC<NotificationModalProps> = ({
     }
   };
 
-  // 4. Test Webhook Zalo
+  // 4. Test Webhook Zalo (Personal & Group via Backend)
   const handleTestWebhook = async () => {
     if (!zaloWebhookUrl || !zaloWebhookUrl.startsWith('http')) {
       alert('Vui lòng nhập URL Webhook hợp lệ (bắt đầu bằng http:// hoặc https://)');
@@ -359,36 +408,29 @@ export const NotificationModal: React.FC<NotificationModalProps> = ({
     setWebhookTestResult(null);
 
     try {
-      const res = await fetch(zaloWebhookUrl, {
+      const res = await fetch('/api/notifications/test-zalo', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(zaloBotToken ? { 'Authorization': `Bearer ${zaloBotToken}` } : {})
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          event: 'TEST_WEBHOOK_PING',
-          company: 'CÔNG TY CỔ PHẦN ĐẦU TƯ TASAGO',
-          group_id: zaloGroupId,
-          message: '🔔 Đây là tin nhắn kiểm tra kết nối Webhook Bot Zalo từ Hệ Thống Nén Mẫu Bê Tông Tasago.',
-          timestamp: new Date().toISOString(),
-          urgent_count: urgentSamples.length,
-          preview_text: notificationPreview.bodyText
+          webhookUrl: zaloWebhookUrl,
+          botToken: zaloBotToken,
+          personalPhone: zaloPersonalPhone || '0942320923',
+          groupId: zaloGroupId || 'Nhóm Kỹ Thuật Tasago'
         })
-      }).catch(err => {
-        console.warn('Webhook fetch note:', err);
-        return null;
       });
 
+      const data = await res.json().catch(() => null);
       setTestingWebhook(false);
-      if (res && (res.ok || res.status === 200 || res.status === 204)) {
+
+      if (res.ok && data?.success) {
         setWebhookTestResult({
           success: true,
-          message: 'Đã gửi thành công yêu cầu tới Webhook Bot Zalo!'
+          message: data.message || `Đã gửi thành công yêu cầu tới Webhook Bot Zalo (SĐT: ${zaloPersonalPhone}, Nhóm: ${zaloGroupId})!`
         });
       } else {
         setWebhookTestResult({
-          success: true,
-          message: `Đã kết nối gửi gói tin tới Webhook (Phản hồi: ${res ? res.status : 'OK/Local'}).`
+          success: false,
+          message: data?.message || `Máy chủ Webhook phản hồi HTTP ${res.status}. Vui lòng kiểm tra quyền truy cập "Bất kỳ ai" trên Google Apps Script.`
         });
       }
     } catch (err: any) {
@@ -1104,28 +1146,36 @@ export const NotificationModal: React.FC<NotificationModalProps> = ({
           </div>
         )}
 
-        {/* Tab 4: BOT ZALO SETTINGS */}
+        {/* Tab 4: BOT ZALO SETTINGS (PERSONAL & GROUP) */}
         {activeTab === 'zalo' && (
           <div className="p-5 sm:p-6 space-y-5 overflow-y-auto max-h-[75vh] text-xs">
-            <div className="bg-blue-50 border border-blue-200 p-4 rounded-xl flex items-start gap-3">
-              <div className="w-8 h-8 rounded-lg bg-blue-600 text-white flex items-center justify-center shrink-0">
-                <MessageSquare className="w-4 h-4" />
+            {/* Header info */}
+            <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 p-4 rounded-2xl flex items-start gap-3">
+              <div className="w-10 h-10 rounded-xl bg-blue-600 text-white flex items-center justify-center shrink-0 shadow-md">
+                <MessageSquare className="w-5 h-5" />
               </div>
               <div className="space-y-1">
-                <h4 className="font-black text-blue-950 text-sm">
-                  Cấu Hình Tự Động Bắn Tin Lịch Nén Mẫu Vào Nhóm Zalo (Bot Zalo)
-                </h4>
-                <p className="text-slate-600 leading-relaxed">
-                  Mỗi khi đến 07:00 sáng hoặc có mẫu đến hạn/quá hạn nén, hệ thống tự động bắn tin trực tiếp vào Nhóm Zalo Kỹ Thuật thông qua Webhook.
+                <div className="flex items-center gap-2">
+                  <h4 className="font-black text-blue-950 text-sm sm:text-base">
+                    Cấu Hình Tự Động Gửi Thông Báo Qua Zalo Bot Cá Nhân & Nhóm
+                  </h4>
+                  <span className="bg-blue-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-full">
+                    Webhook 24/7
+                  </span>
+                </div>
+                <p className="text-slate-600 text-xs leading-relaxed">
+                  Mỗi 07:00 sáng hoặc khi có mẫu đến hạn/quá hạn nén, hệ thống tự động phát tin nhắn qua Webhook Zalo Bot tới <strong>Số điện thoại cá nhân</strong> của KTV/Quản lý hoặc <strong>Nhóm Zalo kỹ thuật</strong>.
                 </p>
               </div>
             </div>
 
-            <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-4">
+            {/* Main form card */}
+            <div className="bg-slate-50 p-4 sm:p-5 rounded-2xl border border-slate-200 space-y-4">
+              {/* Toggle switch */}
               <div className="flex items-center justify-between pb-3 border-b border-slate-200">
                 <div>
-                  <span className="font-bold text-slate-900 block text-xs">Bật tự động gửi qua Bot Zalo</span>
-                  <span className="text-slate-500 text-[11px]">Bắn tin tự động vào nhóm khi có lịch nén</span>
+                  <span className="font-bold text-slate-900 block text-xs sm:text-sm">Bật Tự Động Bắn Tin Qua Bot Zalo</span>
+                  <span className="text-slate-500 text-[11px]">Tự động gửi lúc 07:00 sáng hàng ngày kèm email</span>
                 </div>
                 <label className="relative inline-flex items-center cursor-pointer">
                   <input
@@ -1134,27 +1184,211 @@ export const NotificationModal: React.FC<NotificationModalProps> = ({
                     onChange={(e) => setAutoZaloEnabled(e.target.checked)}
                     className="sr-only peer"
                   />
-                  <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-600"></div>
+                  <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
                 </label>
               </div>
 
+              {/* Recipient Target Mode */}
               <div className="space-y-1.5">
-                <label className="font-bold text-slate-800 block">
-                  Webhook Endpoint URL (Google Apps Script / Webhook Zalo):
+                <label className="font-bold text-slate-800 block text-xs">
+                  Đối Tượng Nhận Tin Zalo:
                 </label>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setZaloRecipientType('personal')}
+                    className={`p-2.5 rounded-xl border flex items-center space-x-2 transition-all cursor-pointer text-left ${
+                      zaloRecipientType === 'personal'
+                        ? 'bg-blue-50 border-blue-500 text-blue-900 font-bold ring-2 ring-blue-500/20'
+                        : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                    }`}
+                  >
+                    <Smartphone className="w-4 h-4 text-blue-600 shrink-0" />
+                    <div>
+                      <div className="text-xs">Zalo Cá Nhân</div>
+                      <div className="text-[10px] text-slate-400 font-normal">Gửi theo SĐT KTV</div>
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setZaloRecipientType('group')}
+                    className={`p-2.5 rounded-xl border flex items-center space-x-2 transition-all cursor-pointer text-left ${
+                      zaloRecipientType === 'group'
+                        ? 'bg-blue-50 border-blue-500 text-blue-900 font-bold ring-2 ring-blue-500/20'
+                        : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                    }`}
+                  >
+                    <Users className="w-4 h-4 text-blue-600 shrink-0" />
+                    <div>
+                      <div className="text-xs">Nhóm Zalo</div>
+                      <div className="text-[10px] text-slate-400 font-normal">Gửi vào Group</div>
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setZaloRecipientType('both')}
+                    className={`p-2.5 rounded-xl border flex items-center space-x-2 transition-all cursor-pointer text-left ${
+                      zaloRecipientType === 'both'
+                        ? 'bg-blue-50 border-blue-500 text-blue-900 font-bold ring-2 ring-blue-500/20'
+                        : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                    }`}
+                  >
+                    <Share2 className="w-4 h-4 text-blue-600 shrink-0" />
+                    <div>
+                      <div className="text-xs">Cả Cá Nhân & Nhóm</div>
+                      <div className="text-[10px] text-slate-400 font-normal">Đồng bộ cả hai</div>
+                    </div>
+                  </button>
+                </div>
+              </div>
+
+              {/* Personal Zalo Phones Management */}
+              {(zaloRecipientType === 'personal' || zaloRecipientType === 'both') && (
+                <div className="bg-white p-3.5 rounded-xl border border-blue-200 space-y-3 shadow-xs">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-2">
+                      <Smartphone className="w-4 h-4 text-blue-600" />
+                      <span className="font-bold text-slate-900 text-xs">
+                        Danh Sách Số Điện Thoại Zalo Cá Nhân Nhận Tin:
+                      </span>
+                    </div>
+                    <span className="text-[11px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full">
+                      {zaloPersonalPhones.length} số đăng ký
+                    </span>
+                  </div>
+
+                  {/* Add phone input */}
+                  <form onSubmit={handleAddPhone} className="flex gap-2">
+                    <div className="relative flex-1">
+                      <Phone className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-3" />
+                      <input
+                        type="text"
+                        value={newPhoneInput}
+                        onChange={(e) => setNewPhoneInput(e.target.value)}
+                        placeholder="Nhập số điện thoại Zalo mới (ví dụ: 0942320923)..."
+                        className="w-full pl-8 pr-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-slate-800 text-xs font-mono outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                    </div>
+                    <button
+                      type="submit"
+                      className="bg-blue-600 hover:bg-blue-700 text-white font-bold px-3 py-2 rounded-xl text-xs flex items-center gap-1 cursor-pointer transition-colors shadow-xs"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>Thêm Số</span>
+                    </button>
+                  </form>
+
+                  {/* Badges list */}
+                  <div className="flex flex-wrap gap-1.5 pt-1">
+                    {zaloPersonalPhones.map((phone) => (
+                      <div
+                        key={phone}
+                        className={`flex items-center gap-1.5 pl-2.5 pr-1.5 py-1 rounded-lg text-xs font-mono transition-all ${
+                          zaloPersonalPhone === phone
+                            ? 'bg-blue-600 text-white font-bold shadow-xs'
+                            : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                        }`}
+                      >
+                        <span 
+                          onClick={() => setZaloPersonalPhone(phone)} 
+                          className="cursor-pointer"
+                          title="Bấm để đặt làm số chính"
+                        >
+                          📱 {phone} {zaloPersonalPhone === phone ? '(Chính)' : ''}
+                        </span>
+                        
+                        {/* Quick Zalo Direct Chat button */}
+                        <button
+                          type="button"
+                          onClick={() => openZaloPersonalChat(phone, notificationPreview.bodyText)}
+                          title={`Mở Zalo nhắn riêng cho số ${phone}`}
+                          className={`p-1 rounded hover:bg-black/10 cursor-pointer ${
+                            zaloPersonalPhone === phone ? 'text-white' : 'text-blue-600'
+                          }`}
+                        >
+                          <ExternalLink className="w-3 h-3" />
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => handleDeletePhone(phone)}
+                          title="Xóa số điện thoại này"
+                          className={`p-1 rounded hover:bg-black/10 cursor-pointer ${
+                            zaloPersonalPhone === phone ? 'text-white/80 hover:text-white' : 'text-red-500 hover:text-red-700'
+                          }`}
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+
+                  <p className="text-[11px] text-slate-500">
+                    💡 <em>Gợi ý:</em> Bấm vào biểu tượng liên kết ↗️ cạnh mỗi số điện thoại để mở ngay trang trò chuyện Zalo cá nhân <code className="bg-slate-100 px-1 py-0.5 rounded text-blue-700">zalo.me/sđt</code> kèm nội dung báo cáo nén mẫu.
+                  </p>
+                </div>
+              )}
+
+              {/* Group Name & Bot Token */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1 text-xs">
+                    Tên Nhóm Zalo Nhận Tin:
+                  </label>
+                  <input
+                    type="text"
+                    value={zaloGroupId}
+                    onChange={(e) => setZaloGroupId(e.target.value)}
+                    placeholder="Nhóm Kỹ Thuật Tasago"
+                    className="w-full bg-white border border-slate-300 rounded-xl p-2.5 text-slate-800 text-xs outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1 text-xs">
+                    Số Điện Thoại Nhận Chính:
+                  </label>
+                  <input
+                    type="text"
+                    value={zaloPersonalPhone}
+                    onChange={(e) => setZaloPersonalPhone(cleanPhoneNumber(e.target.value))}
+                    placeholder="0942320923"
+                    className="w-full bg-white border border-slate-300 rounded-xl p-2.5 font-mono text-slate-800 text-xs outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+              </div>
+
+              {/* Webhook URL with Test Button */}
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <label className="font-bold text-slate-800 block text-xs">
+                    Webhook Endpoint URL (Google Apps Script / Webhook Zalo Bot):
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => setShowScriptModal(true)}
+                    className="text-blue-700 hover:text-blue-800 font-bold text-[11px] flex items-center gap-1 underline cursor-pointer"
+                  >
+                    <FileCode className="w-3.5 h-3.5" />
+                    <span>Lấy mã nguồn Google Apps Script mẫu</span>
+                  </button>
+                </div>
+
                 <div className="flex items-center gap-2">
                   <input
                     type="url"
                     value={zaloWebhookUrl}
                     onChange={(e) => setZaloWebhookUrl(e.target.value)}
                     placeholder="https://script.google.com/macros/s/.../exec"
-                    className="flex-1 bg-white border border-slate-300 rounded-xl p-2.5 text-slate-800 text-xs font-mono outline-none focus:ring-2 focus:ring-emerald-500"
+                    className="flex-1 bg-white border border-slate-300 rounded-xl p-2.5 text-slate-800 text-xs font-mono outline-none focus:ring-2 focus:ring-blue-500"
                   />
                   <button
                     type="button"
                     onClick={handleTestWebhook}
                     disabled={testingWebhook || !zaloWebhookUrl}
-                    className="bg-blue-600 hover:bg-blue-500 text-white font-bold px-4 py-2.5 rounded-xl text-xs flex items-center space-x-1.5 transition-colors cursor-pointer disabled:opacity-50"
+                    className="bg-blue-600 hover:bg-blue-500 text-white font-bold px-4 py-2.5 rounded-xl text-xs flex items-center space-x-1.5 transition-all cursor-pointer shadow-md disabled:opacity-50"
                   >
                     {testingWebhook ? (
                       <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
@@ -1166,48 +1400,63 @@ export const NotificationModal: React.FC<NotificationModalProps> = ({
                 </div>
               </div>
 
+              {/* Test Result Message */}
               {webhookTestResult && (
-                <div className={`p-3 rounded-xl text-xs font-semibold ${
-                  webhookTestResult.success ? 'bg-emerald-100 text-emerald-900 border border-emerald-300' : 'bg-red-100 text-red-900 border border-red-300'
+                <div className={`p-3.5 rounded-xl text-xs font-semibold flex items-start gap-2 ${
+                  webhookTestResult.success 
+                    ? 'bg-emerald-100 text-emerald-900 border border-emerald-300' 
+                    : 'bg-red-100 text-red-900 border border-red-300'
                 }`}>
-                  {webhookTestResult.message}
+                  {webhookTestResult.success ? (
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                  ) : (
+                    <AlertCircle className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
+                  )}
+                  <span>{webhookTestResult.message}</span>
                 </div>
               )}
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-bold text-slate-700 mb-1">
-                    Tên Nhóm Zalo Nhận Tin:
-                  </label>
-                  <input
-                    type="text"
-                    value={zaloGroupId}
-                    onChange={(e) => setZaloGroupId(e.target.value)}
-                    placeholder="Nhóm Kỹ Thuật Tasago"
-                    className="w-full bg-white border border-slate-300 rounded-xl p-2.5 text-slate-800 text-xs"
-                  />
-                </div>
-
-                <div>
-                  <label className="block font-bold text-slate-700 mb-1">
-                    Bot Access Token (Tùy chọn):
-                  </label>
-                  <input
-                    type="password"
-                    value={zaloBotToken}
-                    onChange={(e) => setZaloBotToken(e.target.value)}
-                    placeholder="Để trống nếu dùng Google Apps Script"
-                    className="w-full bg-white border border-slate-300 rounded-xl p-2.5 font-mono text-slate-800 text-xs"
-                  />
-                </div>
-              </div>
             </div>
 
-            <div className="pt-3 border-t border-slate-200 flex items-center justify-end">
+            {/* Quick Script Drawer / Box */}
+            <div className="border border-blue-100 bg-blue-50/50 rounded-2xl p-4 space-y-2.5">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-2 text-blue-950 font-bold text-xs">
+                  <FileCode className="w-4 h-4 text-blue-700" />
+                  <span>Google Apps Script - Cầu Nối Miễn Phí Gửi Zalo Tự Động</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    navigator.clipboard.writeText(GOOGLE_APPS_SCRIPT_ZALO_TEMPLATE);
+                    setCopiedScript(true);
+                    setTimeout(() => setCopiedScript(false), 2500);
+                  }}
+                  className="bg-white hover:bg-blue-50 text-blue-700 border border-blue-300 px-3 py-1 rounded-lg text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-xs transition-all"
+                >
+                  {copiedScript ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+                  <span>{copiedScript ? 'Đã sao chép!' : 'Sao Chép Code Apps Script'}</span>
+                </button>
+              </div>
+              <p className="text-slate-600 text-[11px] leading-relaxed">
+                Tạo một dự án Google Apps Script mới tại <a href="https://script.google.com" target="_blank" rel="noreferrer" className="text-blue-700 font-bold underline">script.google.com</a>, dán toàn bộ đoạn mã trên và nhấn <strong>Triển khai dưới dạng Ứng dụng web (Web App)</strong> với quyền truy cập <em>"Bất kỳ ai (Anyone)"</em>. Sau đó copy URL dán vào ô Webhook Endpoint phía trên.
+              </p>
+            </div>
+
+            {/* Save Buttons */}
+            <div className="pt-3 border-t border-slate-200 flex items-center justify-between">
+              <button
+                type="button"
+                onClick={() => openZaloPersonalChat(zaloPersonalPhone || '0942320923', notificationPreview.bodyText)}
+                className="bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold px-4 py-2.5 rounded-xl text-xs flex items-center space-x-1.5 cursor-pointer transition-colors"
+              >
+                <Smartphone className="w-4 h-4 text-blue-600" />
+                <span>Gửi Thử Zalo Cá Nhân Ngay ({zaloPersonalPhone || '0942320923'})</span>
+              </button>
+
               <button
                 type="button"
                 onClick={handleSaveAllConfig}
-                className="bg-emerald-700 hover:bg-emerald-600 text-white font-bold px-5 py-2.5 rounded-xl text-xs flex items-center space-x-1.5 cursor-pointer shadow-md"
+                className="bg-blue-700 hover:bg-blue-600 text-white font-bold px-6 py-2.5 rounded-xl text-xs flex items-center space-x-1.5 cursor-pointer shadow-lg shadow-blue-700/20 transition-all active:scale-95"
               >
                 <Check className="w-4 h-4" />
                 <span>Lưu Cấu Hình Bot Zalo</span>
@@ -1259,35 +1508,164 @@ export const NotificationModal: React.FC<NotificationModalProps> = ({
           </div>
         )}
 
-        {/* Tab 6: GUIDE */}
+        {/* Tab 6: GUIDE & INSTRUCTIONS */}
         {activeTab === 'guide' && (
-          <div className="p-5 sm:p-6 space-y-4 overflow-y-auto max-h-[75vh] text-xs text-slate-700">
-            <div className="bg-emerald-50 border border-emerald-200 p-4 rounded-xl space-y-2">
-              <h4 className="font-black text-emerald-950 text-sm flex items-center space-x-1.5">
-                <Clock className="w-4 h-4 text-emerald-700" />
+          <div className="p-5 sm:p-6 space-y-5 overflow-y-auto max-h-[75vh] text-xs text-slate-700">
+            {/* Section 1: Zalo Bot Setup Guide */}
+            <div className="bg-gradient-to-br from-blue-50 via-slate-50 to-indigo-50 border border-blue-200 p-5 rounded-2xl space-y-3">
+              <div className="flex items-center justify-between">
+                <h4 className="font-black text-blue-950 text-sm flex items-center space-x-2">
+                  <div className="w-7 h-7 rounded-lg bg-blue-600 text-white flex items-center justify-center">
+                    <MessageSquare className="w-4 h-4" />
+                  </div>
+                  <span>Hướng Dẫn Cấu Hình Tự Động Gửi Zalo Bot Cá Nhân & Nhóm</span>
+                </h4>
+                <span className="bg-blue-100 text-blue-800 text-[10px] font-extrabold px-2.5 py-1 rounded-full uppercase">
+                  Miễn phí 100%
+                </span>
+              </div>
+              <p className="text-slate-600 leading-relaxed">
+                Để hệ thống tự động gửi tin nhắn báo cáo lịch nén mẫu bê tông hàng ngày tới <strong>Số Zalo cá nhân</strong> hoặc <strong>Nhóm Zalo kỹ thuật</strong>, bạn có thể thiết lập Webhook hoàn toàn miễn phí thông qua Google Apps Script theo 4 bước đơn giản:
+              </p>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
+                <div className="bg-white p-3.5 rounded-xl border border-blue-200/80 shadow-xs space-y-1.5">
+                  <div className="font-bold text-blue-900 flex items-center gap-1.5">
+                    <span className="w-5 h-5 rounded-full bg-blue-600 text-white flex items-center justify-center text-[10px]">1</span>
+                    <span>Tạo Dự Án Google Apps Script</span>
+                  </div>
+                  <p className="text-slate-600 text-[11px] leading-normal">
+                    Truy cập <a href="https://script.google.com" target="_blank" rel="noreferrer" className="text-blue-700 font-bold underline">script.google.com</a>, bấm <strong>Dự án mới (New project)</strong>.
+                  </p>
+                </div>
+
+                <div className="bg-white p-3.5 rounded-xl border border-blue-200/80 shadow-xs space-y-1.5">
+                  <div className="font-bold text-blue-900 flex items-center gap-1.5">
+                    <span className="w-5 h-5 rounded-full bg-blue-600 text-white flex items-center justify-center text-[10px]">2</span>
+                    <span>Dán Mã Nguồn Tự Động</span>
+                  </div>
+                  <p className="text-slate-600 text-[11px] leading-normal">
+                    Xóa sạch mã cũ trong tệp <code className="bg-slate-100 px-1 rounded text-blue-800">Code.gs</code> và dán toàn bộ mã nguồn Google Apps Script mẫu được cung cấp bên dưới.
+                  </p>
+                </div>
+
+                <div className="bg-white p-3.5 rounded-xl border border-blue-200/80 shadow-xs space-y-1.5">
+                  <div className="font-bold text-blue-900 flex items-center gap-1.5">
+                    <span className="w-5 h-5 rounded-full bg-blue-600 text-white flex items-center justify-center text-[10px]">3</span>
+                    <span>Triển Khai Dạng Web App</span>
+                  </div>
+                  <p className="text-slate-600 text-[11px] leading-normal">
+                    Bấm <strong>Triển khai (Deploy)</strong> &gt; <strong>Triển khai mới (New deployment)</strong> &gt; Chọn loại <strong>Ứng dụng web (Web App)</strong>. Đặt quyền truy cập là <em>"Bất kỳ ai (Anyone)"</em>.
+                  </p>
+                </div>
+
+                <div className="bg-white p-3.5 rounded-xl border border-blue-200/80 shadow-xs space-y-1.5">
+                  <div className="font-bold text-blue-900 flex items-center gap-1.5">
+                    <span className="w-5 h-5 rounded-full bg-blue-600 text-white flex items-center justify-center text-[10px]">4</span>
+                    <span>Dán URL & Bắn Thử Tin Nhắn</span>
+                  </div>
+                  <p className="text-slate-600 text-[11px] leading-normal">
+                    Sao chép URL Web App kết thúc bằng <code className="bg-slate-100 px-1 rounded text-blue-800">/exec</code> và dán vào ô Webhook URL ở tab Bot Zalo, sau đó nhấn <strong>⚡ Bắn Thử Zalo</strong>.
+                  </p>
+                </div>
+              </div>
+
+              {/* Code Box with 1-Click Copy */}
+              <div className="mt-3 bg-slate-900 text-slate-100 p-4 rounded-xl border border-slate-800 space-y-2">
+                <div className="flex items-center justify-between pb-2 border-b border-slate-800">
+                  <span className="font-mono text-emerald-400 text-xs font-bold flex items-center gap-1.5">
+                    <FileCode className="w-4 h-4" />
+                    <span>Mã nguồn Google Apps Script (Code.gs)</span>
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      navigator.clipboard.writeText(GOOGLE_APPS_SCRIPT_ZALO_TEMPLATE);
+                      setCopiedScript(true);
+                      setTimeout(() => setCopiedScript(false), 2500);
+                    }}
+                    className="bg-blue-600 hover:bg-blue-500 text-white px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-colors shadow-xs"
+                  >
+                    {copiedScript ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                    <span>{copiedScript ? 'Đã sao chép!' : 'Sao Chép Toàn Bộ Mã'}</span>
+                  </button>
+                </div>
+                <pre className="text-[11px] font-mono text-slate-300 overflow-x-auto max-h-60 p-2 bg-slate-950/70 rounded-lg whitespace-pre">
+                  {GOOGLE_APPS_SCRIPT_ZALO_TEMPLATE}
+                </pre>
+              </div>
+            </div>
+
+            {/* Section 2: Gmail SMTP Setup Guide */}
+            <div className="bg-emerald-50 border border-emerald-200 p-5 rounded-2xl space-y-3">
+              <h4 className="font-black text-emerald-950 text-sm flex items-center space-x-2">
+                <div className="w-7 h-7 rounded-lg bg-emerald-600 text-white flex items-center justify-center">
+                  <Clock className="w-4 h-4" />
+                </div>
                 <span>Cơ Chế Tự Động Gửi Email 07:00 Sáng Hàng Ngày</span>
               </h4>
               <p className="text-slate-600 leading-relaxed">
-                Hệ thống backend của cổng thông tin Tasago chạy tiến trình kiểm tra thời gian thực. Mỗi khi đồng hồ đạt mốc <strong>07:00 Sáng</strong> (Múi giờ Việt Nam GMT+7):
+                Hệ thống máy chủ backend của cổng thông tin Tasago chạy tiến trình kiểm tra 24/7. Mỗi khi đồng hồ đạt mốc <strong>07:00 Sáng</strong> (Múi giờ Việt Nam GMT+7):
               </p>
               <ul className="list-disc pl-5 space-y-1 text-slate-700">
                 <li>Tự động quét danh sách mẫu bê tông cần nén hôm nay (R3, R7, R14, R28, Waterproof...).</li>
                 <li>Tạo báo cáo chi tiết kèm thông tin công trình, nhà thầu, khối lượng và số điện thoại liên hệ.</li>
                 <li>Gửi trực tiếp qua máy chủ SMTP (Gmail, Google Workspace) tới danh sách email KTV.</li>
               </ul>
-            </div>
 
-            <div className="p-4 rounded-xl border border-slate-200 bg-white space-y-2.5">
-              <h4 className="font-bold text-slate-900 text-xs uppercase">
-                Hướng Dẫn Lấy Mật Khẩu Ứng Dụng (App Password) Cho Gmail tasagotnt@gmail.com:
-              </h4>
-              <ol className="list-decimal pl-5 space-y-1.5 text-slate-600 leading-relaxed">
-                <li>Truy cập vào trang quản lý tài khoản Google: <a href="https://myaccount.google.com/security" target="_blank" rel="noreferrer" className="text-blue-700 font-bold underline">myaccount.google.com/security</a>.</li>
-                <li>Bật tính năng <strong>Xác minh 2 bước (2-Step Verification)</strong> nếu chưa bật.</li>
-                <li>Vào mục <strong>Mật khẩu ứng dụng (App passwords)</strong> tại: <a href="https://myaccount.google.com/apppasswords" target="_blank" rel="noreferrer" className="text-blue-700 font-bold underline">myaccount.google.com/apppasswords</a>.</li>
-                <li>Đặt tên ứng dụng (ví dụ: <code className="bg-slate-100 px-1 py-0.5 rounded font-bold">Tasago Portal</code>) và bấm <strong>Tạo</strong>.</li>
-                <li>Sao chép mã 16 ký tự vừa tạo và dán vào ô <strong>Mật khẩu ứng dụng</strong> trong bảng cài đặt SMTP.</li>
-              </ol>
+              <div className="p-4 rounded-xl border border-emerald-200 bg-white space-y-2 mt-2">
+                <h5 className="font-bold text-slate-900 text-xs uppercase">
+                  Hướng Dẫn Lấy Mật Khẩu Ứng Dụng (App Password) Cho Gmail tasagotnt@gmail.com:
+                </h5>
+                <ol className="list-decimal pl-5 space-y-1.5 text-slate-600 leading-relaxed">
+                  <li>Truy cập vào trang quản lý tài khoản Google: <a href="https://myaccount.google.com/security" target="_blank" rel="noreferrer" className="text-blue-700 font-bold underline">myaccount.google.com/security</a>.</li>
+                  <li>Bật tính năng <strong>Xác minh 2 bước (2-Step Verification)</strong> nếu chưa bật.</li>
+                  <li>Vào mục <strong>Mật khẩu ứng dụng (App passwords)</strong> tại: <a href="https://myaccount.google.com/apppasswords" target="_blank" rel="noreferrer" className="text-blue-700 font-bold underline">myaccount.google.com/apppasswords</a>.</li>
+                  <li>Đặt tên ứng dụng (ví dụ: <code className="bg-slate-100 px-1 py-0.5 rounded font-bold">Tasago Portal</code>) và bấm <strong>Tạo</strong>.</li>
+                  <li>Sao chép mã 16 ký tự vừa tạo và dán vào ô <strong>Mật khẩu ứng dụng</strong> trong bảng cài đặt SMTP.</li>
+                </ol>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Modal for full script preview if opened */}
+        {showScriptModal && (
+          <div className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs">
+            <div className="bg-slate-900 text-slate-100 w-full max-w-3xl rounded-2xl p-5 border border-slate-800 shadow-2xl space-y-4">
+              <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+                <div className="flex items-center space-x-2">
+                  <FileCode className="w-5 h-5 text-blue-400" />
+                  <h3 className="font-bold text-sm text-white">Mã Nguồn Google Apps Script - Zalo Webhook Bot</h3>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowScriptModal(false)}
+                  className="p-1 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-white cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <pre className="text-xs font-mono text-emerald-300 bg-slate-950 p-4 rounded-xl max-h-[60vh] overflow-y-auto whitespace-pre">
+                {GOOGLE_APPS_SCRIPT_ZALO_TEMPLATE}
+              </pre>
+
+              <div className="flex items-center justify-between pt-2">
+                <span className="text-[11px] text-slate-400">Dán vào Google Apps Script và triển khai dạng Web App (Anyone)</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    navigator.clipboard.writeText(GOOGLE_APPS_SCRIPT_ZALO_TEMPLATE);
+                    setCopiedScript(true);
+                    setTimeout(() => setCopiedScript(false), 2500);
+                  }}
+                  className="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer"
+                >
+                  {copiedScript ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                  <span>{copiedScript ? 'Đã sao chép vào bộ nhớ tạm' : 'Sao chép mã'}</span>
+                </button>
+              </div>
             </div>
           </div>
         )}
