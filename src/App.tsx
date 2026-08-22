@@ -663,6 +663,27 @@ export default function App() {
 
       </main>
 
+      {/* Floating Action Button (FAB) - Always visible, fixed at the bottom-right corner with prominent pulsing effect */}
+      <div className="fixed bottom-16 sm:bottom-8 right-4 sm:right-8 z-40 flex flex-col items-end">
+        <button
+          type="button"
+          onClick={handleOpenAddForm}
+          className="group relative flex items-center gap-2.5 px-4 sm:px-5 py-3 sm:py-3.5 bg-gradient-to-r from-emerald-500 via-emerald-600 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white rounded-full font-extrabold shadow-2xl border-2 border-white/60 animate-pulse-glow transition-all active:scale-95 cursor-pointer select-none"
+          title="Nhập mẫu mới / Tạo lịch nén bê tông"
+        >
+          <span className="relative flex h-3.5 w-3.5">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-300 opacity-80"></span>
+            <span className="relative inline-flex rounded-full h-3.5 w-3.5 bg-amber-400"></span>
+          </span>
+          <div className="p-1 bg-white/20 rounded-full group-hover:rotate-90 transition-transform duration-300">
+            <Plus className="w-5 h-5 sm:w-6 sm:h-6 stroke-[3]" />
+          </div>
+          <span className="text-sm sm:text-base font-black tracking-wide uppercase drop-shadow-md whitespace-nowrap">
+            Nhập Mẫu Mới
+          </span>
+        </button>
+      </div>
+
       {/* Fixed Bottom Navigation Bar for Mobile (Always visible in Mobile mode or on small screens) */}
       <div className={`fixed bottom-0 left-0 right-0 z-40 bg-slate-900/95 backdrop-blur-md border-t border-slate-700 px-2 py-1.5 text-slate-300 shadow-2xl ${
         viewMode === 'pc' ? 'hidden' : 'md:hidden'
