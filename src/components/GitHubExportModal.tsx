@@ -11,7 +11,8 @@ import {
   HardDrive, 
   FolderArchive,
   Sparkles,
-  ExternalLink
+  ExternalLink,
+  Smartphone
 } from 'lucide-react';
 import { ConcreteSample, Station, User, NotificationConfig } from '../types';
 import { exportSamplesToExcel } from '../utils/excelExport';
@@ -24,6 +25,7 @@ interface GitHubExportModalProps {
   users: User[];
   notificationConfig: NotificationConfig;
   onImportFullState: (stateData: any) => void;
+  onOpenMobileExport?: () => void;
 }
 
 export const GitHubExportModal: React.FC<GitHubExportModalProps> = ({
@@ -34,6 +36,7 @@ export const GitHubExportModal: React.FC<GitHubExportModalProps> = ({
   users,
   notificationConfig,
   onImportFullState,
+  onOpenMobileExport,
 }) => {
   const [copiedScript, setCopiedScript] = useState(false);
   const [copiedJson, setCopiedJson] = useState(false);
@@ -231,6 +234,40 @@ git push -u origin main`;
               </ul>
             </div>
           </div>
+
+          {/* Section 3: Mobile App Publishing (CH Play & App Store) */}
+          {onOpenMobileExport && (
+            <div className="bg-emerald-950 text-emerald-100 p-4 rounded-xl border border-emerald-800/80 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-md">
+              <div className="flex items-center space-x-3">
+                <div className="w-10 h-10 rounded-xl bg-emerald-500/20 border border-emerald-400/40 flex items-center justify-center text-emerald-300 font-bold shrink-0">
+                  <Smartphone className="w-5 h-5" />
+                </div>
+                <div>
+                  <h4 className="font-bold text-xs sm:text-sm text-white flex items-center gap-1.5">
+                    <span>3. Đóng Gói App Cho Google Play & Apple App Store</span>
+                    <span className="bg-emerald-500/30 text-emerald-300 text-[10px] px-1.5 py-0.2 rounded font-mono">
+                      Capacitor
+                    </span>
+                  </h4>
+                  <p className="text-[11px] text-emerald-200/80 mt-0.5">
+                    Xuất file `.aab` cho Android và mở Xcode cho iOS để đưa lên kho ứng dụng di động.
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => {
+                  onClose();
+                  onOpenMobileExport();
+                }}
+                className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs px-4 py-2 rounded-xl flex items-center space-x-1.5 shadow-sm transition-all whitespace-nowrap cursor-pointer"
+              >
+                <span>Mở Trợ Lý Đóng Gói Mobile</span>
+                <ExternalLink className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          )}
 
           {/* Close Button */}
           <div className="pt-2 flex justify-end">

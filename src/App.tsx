@@ -62,6 +62,7 @@ import { CalendarView } from './components/CalendarView';
 import { ReportsView } from './components/ReportsView';
 import { UserManagementModal } from './components/UserManagementModal';
 import { GitHubExportModal } from './components/GitHubExportModal';
+import { MobileAppExportModal } from './components/MobileAppExportModal';
 
 export default function App() {
   // Authentication state
@@ -95,6 +96,7 @@ export default function App() {
   const [isUserManagementModalOpen, setIsUserManagementModalOpen] = useState(false);
   const [userManagementTab, setUserManagementTab] = useState<'users' | 'stations'>('stations');
   const [isGitHubExportModalOpen, setIsGitHubExportModalOpen] = useState(false);
+  const [isMobileAppModalOpen, setIsMobileAppModalOpen] = useState(false);
   const [showAutoAlertBanner, setShowAutoAlertBanner] = useState(true);
   const [browserNotificationGranted, setBrowserNotificationGranted] = useState(() => {
     return typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted';
@@ -415,9 +417,10 @@ export default function App() {
           setIsUserManagementModalOpen(true);
         }}
         onOpenExportBackup={() => setIsGitHubExportModalOpen(true)}
+        onOpenMobileExportModal={() => setIsMobileAppModalOpen(true)}
         urgentCount={urgentCount}
         viewMode={viewMode}
-        onToggleViewMode={handleViewModeChange}
+        onChangeViewMode={handleViewModeChange}
       />
 
       {/* Main Container */}
@@ -756,6 +759,13 @@ export default function App() {
         users={users}
         notificationConfig={notificationConfig}
         onImportFullState={handleImportFullState}
+        onOpenMobileExport={() => setIsMobileAppModalOpen(true)}
+      />
+
+      {/* 7. Mobile App Export & Publish (CH Play & App Store) Modal */}
+      <MobileAppExportModal
+        isOpen={isMobileAppModalOpen}
+        onClose={() => setIsMobileAppModalOpen(false)}
       />
 
     </div>
