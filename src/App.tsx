@@ -112,111 +112,78 @@ export default function App() {
     }
   }, [currentUser]);
 
-  // Two-way Real-time synchronization helper
-  const syncWithServer = useCallback(async (pushData?: { samples?: ConcreteSample[]; stations?: Station[]; users?: User[]; config?: NotificationConfig }) => {
+  // Two-way Real-time synchronization helper: Pull latest state from backend server
+  const fetchServerSync = useCallback(async () => {
     try {
-      if (pushData) {
-        // Push state to backend server
-        const res = await fetch('/api/server-sync', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            samples: pushData.samples || samples,
-            stations: pushData.stations || stations,
-            users: pushData.users || users,
-            config: pushData.config || notificationConfig
-          })
-        });
-        if (res.ok) {
-          const data = await res.json();
-          if (data.users && Array.isArray(data.users) && data.users.length > 0) {
-            setUsers(data.users);
-            saveUsers(data.users);
-          }
-          if (data.samples && Array.isArray(data.samples)) {
-            const recalced = recalculateSampleStatuses(data.samples);
-            setSamples(recalced);
-            saveSamples(recalced);
-          }
-          if (data.stations && Array.isArray(data.stations)) {
-            setStations(data.stations);
-            saveStations(data.stations);
-          }
+      const res = await fetch('/api/server-sync');
+      if (res.ok) {
+        const data = await res.json();
+        if (data.users && Array.isArray(data.users) && data.users.length > 0) {
+          setUsers(prev => {
+            if (JSON.stringify(prev) !== JSON.stringify(data.users)) {
+              saveUsers(data.users);
+              return data.users;
+            }
+            return prev;
+          });
         }
-      } else {
-        // Pull latest state from backend server
-        const res = await fetch('/api/server-sync');
-        if (res.ok) {
-          const data = await res.json();
-          if (data.users && Array.isArray(data.users) && data.users.length > 0) {
-            setUsers(prev => {
-              // Only update if changed
-              if (JSON.stringify(prev) !== JSON.stringify(data.users)) {
-                saveUsers(data.users);
-                return data.users;
-              }
-              return prev;
-            });
-          }
-          if (data.samples && Array.isArray(data.samples) && data.samples.length > 0) {
-            setSamples(prev => {
-              const currentJson = JSON.stringify(prev);
-              const serverJson = JSON.stringify(data.samples);
-              if (currentJson !== serverJson) {
-                const recalced = recalculateSampleStatuses(data.samples);
-                saveSamples(recalced);
-                return recalced;
-              }
-              return prev;
-            });
-          }
-          if (data.stations && Array.isArray(data.stations) && data.stations.length > 0) {
-            setStations(prev => {
-              if (JSON.stringify(prev) !== JSON.stringify(data.stations)) {
-                saveStations(data.stations);
-                return data.stations;
-              }
-              return prev;
-            });
-          }
+        if (data.samples && Array.isArray(data.samples) && data.samples.length > 0) {
+          setSamples(prev => {
+            const currentJson = JSON.stringify(prev);
+            const serverJson = JSON.stringify(data.samples);
+            if (currentJson !== serverJson) {
+              const recalced = recalculateSampleStatuses(data.samples);
+              saveSamples(recalced);
+              return recalced;
+            }
+            return prev;
+          });
+        }
+        if (data.stations && Array.isArray(data.stations) && data.stations.length > 0) {
+          setStations(prev => {
+            if (JSON.stringify(prev) !== JSON.stringify(data.stations)) {
+              saveStations(data.stations);
+              return data.stations;
+            }
+            return prev;
+          });
+        }
+        if (data.config && typeof data.config === 'object') {
+          setNotificationConfig(prev => {
+            if (JSON.stringify(prev) !== JSON.stringify(data.config)) {
+              saveNotificationConfig(data.config);
+              return data.config;
+            }
+            return prev;
+          });
         }
       }
     } catch (err) {
       // Offline fallback
     }
-  }, [samples, stations, users, notificationConfig]);
+  }, []);
 
-  // Recalculate status and trigger automated notification check on mount & periodically
+  // Initial load from server and periodic polling for real-time multi-device sync
   useEffect(() => {
-    const fresh = recalculateSampleStatuses(loadSamples());
-    setSamples(fresh);
-    saveSamples(fresh);
+    // 1. First fetch latest state from central server
+    fetchServerSync();
 
-    // Initial server push & sync
-    syncWithServer({
-      samples: fresh,
-      stations,
-      users,
-      config: notificationConfig
-    });
-
-    // Background Notification Check (Triggers at 07:00 AM VN Time)
+    // 2. Automated background notification check
     if (currentUser) {
-      checkAndTriggerAutoNotifications(fresh, stations, notificationConfig).catch(console.error);
+      checkAndTriggerAutoNotifications(samples, stations, notificationConfig).catch(console.error);
     }
 
-    // Interval check every 5 seconds for real-time multi-user synchronization & notifications
+    // 3. Interval check every 3.5 seconds for instant multi-user synchronization & notifications
     const timer = setInterval(() => {
-      syncWithServer();
+      fetchServerSync();
       const currentSamples = recalculateSampleStatuses(loadSamples());
-      setSamples(currentSamples);
       if (currentUser) {
         checkAndTriggerAutoNotifications(currentSamples, stations, notificationConfig).catch(console.error);
       }
-    }, 5000);
+    }, 3500);
 
     return () => clearInterval(timer);
-  }, []);
+  }, [currentUser]);
 
   const handleRequestPushPermission = async () => {
     const granted = await requestBrowserNotificationPermission();
@@ -231,8 +198,9 @@ export default function App() {
   const handleLogin = (user: User) => {
     setCurrentUser(user);
     saveCurrentUserToStorage(user);
-    if (user.role === 'member' && user.stationId) {
-      setSelectedStationId(user.stationId);
+    const targetStation = user.stationId || (user.stationIds && user.stationIds[0] !== 'all' ? user.stationIds[0] : '');
+    if (user.role === 'member' && targetStation) {
+      setSelectedStationId(targetStation);
     } else {
       setSelectedStationId('all');
     }
@@ -245,34 +213,35 @@ export default function App() {
   };
 
   // Handler: Save Sample (Create or Edit)
-  const handleSaveSample = (sampleData: Partial<ConcreteSample>) => {
+  const handleSaveSample = async (sampleData: Partial<ConcreteSample>) => {
+    let savedSample: ConcreteSample;
     let updatedSamples: ConcreteSample[];
 
     if (editingSample) {
       // Update existing
-      updatedSamples = samples.map(s => {
-        if (s.id === editingSample.id) {
-          const updated = {
-            ...s,
-            ...sampleData,
-            updatedAt: new Date().toISOString(),
-          } as ConcreteSample;
-          return updated;
-        }
-        return s;
-      });
+      savedSample = {
+        ...editingSample,
+        ...sampleData,
+        updatedAt: new Date().toISOString(),
+      } as ConcreteSample;
+
+      updatedSamples = samples.map(s => s.id === editingSample.id ? savedSample : s);
     } else {
       // Create new
-      const newSample: ConcreteSample = {
+      const primaryStation = (currentUser?.stationIds && currentUser.stationIds[0] !== 'all') 
+        ? currentUser.stationIds[0] 
+        : (currentUser?.stationId || stations[0]?.id || 'sta_hocmon');
+
+      savedSample = {
         id: `TSG-${Date.now().toString().slice(-6)}`,
         sampleCode: sampleData.sampleCode || `M-${Date.now().toString().slice(-4)}`,
         category: sampleData.category || 'commercial',
-        stationId: sampleData.stationId || stations[0]?.id || 'station_hocmon',
+        stationId: sampleData.stationId || primaryStation,
         projectName: sampleData.projectName || '',
         contractor: sampleData.contractor || '',
         component: sampleData.component || '',
         location: sampleData.location || '',
-        concreteGrade: sampleData.concreteGrade || 'M300 R28',
+        concreteGrade: sampleData.concreteGrade || 'M300 (B22.5)',
         slumpCm: sampleData.slumpCm || '12±2',
         volumeM3: Number(sampleData.volumeM3) || 10,
         castDate: sampleData.castDate || new Date().toISOString().split('T')[0],
@@ -295,38 +264,91 @@ export default function App() {
         createdByName: currentUser?.fullName || 'Hệ Thống Tasago',
       };
 
-      updatedSamples = [newSample, ...samples];
+      updatedSamples = [savedSample, ...samples];
     }
 
     const finalized = recalculateSampleStatuses(updatedSamples);
     setSamples(finalized);
     saveSamples(finalized);
-    syncWithServer({ samples: finalized });
     setIsFormModalOpen(false);
     setEditingSample(null);
+
+    // Save to central server immediately and update state
+    try {
+      const res = await fetch('/api/samples/save', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sample: savedSample })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.samples && Array.isArray(data.samples)) {
+          const recalced = recalculateSampleStatuses(data.samples);
+          setSamples(recalced);
+          saveSamples(recalced);
+        }
+      }
+    } catch (err) {
+      console.warn('Could not push sample to server:', err);
+    }
   };
 
   // Handler: Delete Sample
-  const handleDeleteSample = (id: string) => {
+  const handleDeleteSample = async (id: string) => {
     if (confirm('Bạn có chắc chắn muốn xóa mẫu bê tông này khỏi hệ thống?')) {
       const updated = samples.filter(s => s.id !== id);
-      setSamples(updated);
-      saveSamples(updated);
-      syncWithServer({ samples: updated });
+      const finalized = recalculateSampleStatuses(updated);
+      setSamples(finalized);
+      saveSamples(finalized);
+
+      try {
+        const res = await fetch('/api/samples/delete', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id })
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.samples && Array.isArray(data.samples)) {
+            const recalced = recalculateSampleStatuses(data.samples);
+            setSamples(recalced);
+            saveSamples(recalced);
+          }
+        }
+      } catch (err) {
+        console.warn('Could not delete sample on server:', err);
+      }
     }
   };
 
   // Handler: Direct Delete Sample without double confirm
-  const handleDeleteSampleDirect = (id: string) => {
+  const handleDeleteSampleDirect = async (id: string) => {
     const updated = samples.filter(s => s.id !== id);
     const finalized = recalculateSampleStatuses(updated);
     setSamples(finalized);
     saveSamples(finalized);
-    syncWithServer({ samples: finalized });
+
+    try {
+      const res = await fetch('/api/samples/delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.samples && Array.isArray(data.samples)) {
+          const recalced = recalculateSampleStatuses(data.samples);
+          setSamples(recalced);
+          saveSamples(recalced);
+        }
+      }
+    } catch (err) {
+      console.warn('Could not delete sample on server:', err);
+    }
   };
 
   // Handler: Quick Mark Sample Tested (1-click from Calendar)
-  const handleQuickMarkTested = (sample: ConcreteSample) => {
+  const handleQuickMarkTested = async (sample: ConcreteSample) => {
     const designMpa = sample.concreteGrade.startsWith('M')
       ? Math.round(Number(sample.concreteGrade.replace('M', '')) / 10)
       : Number(sample.concreteGrade.replace('B', '')) || 25;
@@ -354,14 +376,16 @@ export default function App() {
       notes: 'Đã nén & cập nhật trực tiếp trên Lịch Nén Mẫu'
     };
 
+    let updatedTargetSample: ConcreteSample | null = null;
     const updated = samples.map(s => {
       if (s.id === sample.id) {
-        return {
+        updatedTargetSample = {
           ...s,
           status: 'tested_passed' as const,
           testResult: quickResult,
           updatedAt: new Date().toISOString(),
         };
+        return updatedTargetSample;
       }
       return s;
     });
@@ -369,20 +393,41 @@ export default function App() {
     const finalized = recalculateSampleStatuses(updated);
     setSamples(finalized);
     saveSamples(finalized);
-    syncWithServer({ samples: finalized });
+
+    if (updatedTargetSample) {
+      try {
+        const res = await fetch('/api/samples/save', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sample: updatedTargetSample })
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.samples && Array.isArray(data.samples)) {
+            const recalced = recalculateSampleStatuses(data.samples);
+            setSamples(recalced);
+            saveSamples(recalced);
+          }
+        }
+      } catch (err) {
+        console.warn('Could not save test result to server:', err);
+      }
+    }
   };
 
   // Handler: Save Test Result
-  const handleSaveTestResult = (sampleId: string, resultData: TestResultData) => {
+  const handleSaveTestResult = async (sampleId: string, resultData: TestResultData) => {
+    let updatedTargetSample: ConcreteSample | null = null;
     const updated = samples.map(s => {
       if (s.id === sampleId) {
         const newStatus = resultData.isPassed ? 'tested_passed' : 'tested_failed';
-        return {
+        updatedTargetSample = {
           ...s,
           status: newStatus as any,
           testResult: resultData,
           updatedAt: new Date().toISOString(),
         };
+        return updatedTargetSample;
       }
       return s;
     });
@@ -390,34 +435,91 @@ export default function App() {
     const finalized = recalculateSampleStatuses(updated);
     setSamples(finalized);
     saveSamples(finalized);
-    syncWithServer({ samples: finalized });
     setIsTestResultModalOpen(false);
     setTestingSample(null);
+
+    if (updatedTargetSample) {
+      try {
+        const res = await fetch('/api/samples/save', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sample: updatedTargetSample })
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.samples && Array.isArray(data.samples)) {
+            const recalced = recalculateSampleStatuses(data.samples);
+            setSamples(recalced);
+            saveSamples(recalced);
+          }
+        }
+      } catch (err) {
+        console.warn('Could not save test result to server:', err);
+      }
+    }
   };
 
   // Handler: Save Notification Config
-  const handleSaveNotificationConfig = (config: NotificationConfig) => {
+  const handleSaveNotificationConfig = async (config: NotificationConfig) => {
     setNotificationConfig(config);
     saveNotificationConfig(config);
-    syncWithServer({ config });
+    try {
+      await fetch('/api/server-sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ config })
+      });
+    } catch (err) {
+      console.warn('Could not sync notification config to server:', err);
+    }
   };
 
   // Handler: Save Users (Admin)
-  const handleSaveUsers = (updatedUsers: User[]) => {
+  const handleSaveUsers = async (updatedUsers: User[]) => {
     setUsers(updatedUsers);
     saveUsers(updatedUsers);
-    syncWithServer({ users: updatedUsers });
+    try {
+      const res = await fetch('/api/users', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ users: updatedUsers })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.users && Array.isArray(data.users)) {
+          setUsers(data.users);
+          saveUsers(data.users);
+        }
+      }
+    } catch (err) {
+      console.warn('Could not save users to server:', err);
+    }
   };
 
   // Handler: Save Stations (Admin)
-  const handleSaveStations = (updatedStations: Station[]) => {
+  const handleSaveStations = async (updatedStations: Station[]) => {
     setStations(updatedStations);
     saveStations(updatedStations);
-    syncWithServer({ stations: updatedStations });
+    try {
+      const res = await fetch('/api/stations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ stations: updatedStations })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.stations && Array.isArray(data.stations)) {
+          setStations(data.stations);
+          saveStations(data.stations);
+        }
+      }
+    } catch (err) {
+      console.warn('Could not save stations to server:', err);
+    }
   };
 
   // Handler: Import Full State (Backup Restore)
-  const handleImportFullState = (stateData: any) => {
+  const handleImportFullState = async (stateData: any) => {
     if (stateData.samples) {
       const recalc = recalculateSampleStatuses(stateData.samples);
       setSamples(recalc);
@@ -434,6 +536,22 @@ export default function App() {
     if (stateData.notificationConfig) {
       setNotificationConfig(stateData.notificationConfig);
       saveNotificationConfig(stateData.notificationConfig);
+    }
+
+    try {
+      await fetch('/api/server-sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'restore_full_backup',
+          samples: stateData.samples,
+          stations: stateData.stations,
+          users: stateData.users,
+          config: stateData.notificationConfig
+        })
+      });
+    } catch (err) {
+      console.warn('Could not restore backup to server:', err);
     }
   };
 

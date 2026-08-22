@@ -4,11 +4,12 @@ import fs from 'fs';
 import { fileURLToPath } from 'url';
 import nodemailer from 'nodemailer';
 import { createServer as createViteServer } from 'vite';
+import { INITIAL_USERS, INITIAL_STATIONS, INITIAL_SAMPLES, INITIAL_NOTIFICATION_CONFIG } from './src/data/initialData';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Server in-memory state for automated 7:00 AM Cron
+// Server in-memory state for automated 7:00 AM Cron & Multi-user synchronization
 interface ServerState {
   samples: any[];
   stations: any[];
@@ -44,33 +45,45 @@ function loadPersistedState(): ServerState {
     if (fs.existsSync(stateFilePath)) {
       const raw = fs.readFileSync(stateFilePath, 'utf8');
       const parsed = JSON.parse(raw);
-      if (!Array.isArray(parsed.users)) parsed.users = [];
+      if (!Array.isArray(parsed.users) || parsed.users.length === 0) {
+        parsed.users = INITIAL_USERS;
+      }
+      if (!Array.isArray(parsed.stations) || parsed.stations.length === 0) {
+        parsed.stations = INITIAL_STATIONS;
+      }
+      if (!Array.isArray(parsed.samples) || parsed.samples.length === 0) {
+        parsed.samples = INITIAL_SAMPLES;
+      }
+      if (!parsed.config || typeof parsed.config !== 'object') {
+        parsed.config = INITIAL_NOTIFICATION_CONFIG;
+      }
       return parsed;
     }
   } catch (e) {
     console.warn('Could not load server-state.json, using defaults:', e);
   }
-  return {
-    samples: [],
-    stations: [],
-    users: [],
-    config: {
-      autoEmailEnabled: true,
-      autoZaloEnabled: true,
-      emailRecipients: ['thanhtgndt@gmail.com', 'kythuat@tasago.vn'],
-      emailSender: 'Bê Tông Tasago <tasagotnt@gmail.com>',
-      autoSendHour: 7,
-      autoSendMinute: 0,
-      smtpHost: 'smtp.gmail.com',
-      smtpPort: 587,
-      smtpSecure: false,
-      smtpUser: 'tasagotnt@gmail.com',
-      smtpPass: '',
-      emailServiceUrl: ''
-    },
+
+  // Default initial server state
+  const defaultState: ServerState = {
+    samples: INITIAL_SAMPLES,
+    stations: INITIAL_STATIONS,
+    users: INITIAL_USERS,
+    config: INITIAL_NOTIFICATION_CONFIG,
     lastCronDate: '',
     lastCronLog: 'Hệ thống vừa khởi động, sẵn sàng cho lịch phát 07:00 Sáng.'
   };
+
+  try {
+    const dir = path.dirname(stateFilePath);
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+    fs.writeFileSync(stateFilePath, JSON.stringify(defaultState, null, 2), 'utf8');
+  } catch (e) {
+    console.warn('Could not write default server-state.json:', e);
+  }
+
+  return defaultState;
 }
 
 function savePersistedState(state: ServerState) {
@@ -332,16 +345,42 @@ async function startServer() {
     return res.json({ success: true, users: (serverState as any).users || [] });
   });
 
-  // Save/Update users
+  // Save/Update users (atomic upsert or list)
   app.post('/api/users', (req, res) => {
     try {
-      const { users } = req.body;
-      if (Array.isArray(users)) {
+      const { users, user } = req.body;
+      let currentUsers = (serverState as any).users || [];
+      
+      if (user && typeof user === 'object' && user.id) {
+        const existingIdx = currentUsers.findIndex((u: any) => u.id === user.id || (user.username && u.username === user.username));
+        if (existingIdx >= 0) {
+          currentUsers[existingIdx] = { ...currentUsers[existingIdx], ...user };
+        } else {
+          currentUsers = [...currentUsers, user];
+        }
+        (serverState as any).users = currentUsers;
+      } else if (Array.isArray(users)) {
         (serverState as any).users = users;
-        savePersistedState(serverState);
-        return res.json({ success: true, count: users.length });
       }
-      return res.status(400).json({ success: false, message: 'Invalid users array' });
+      
+      savePersistedState(serverState);
+      return res.json({ success: true, users: (serverState as any).users });
+    } catch (e: any) {
+      return res.status(500).json({ success: false, message: e.message });
+    }
+  });
+
+  // Delete user endpoint
+  app.post('/api/users/delete', (req, res) => {
+    try {
+      const { id } = req.body;
+      if (!id) return res.status(400).json({ success: false, message: 'Missing user ID' });
+      let currentUsers = (serverState as any).users || [];
+      // Do not allow deleting root admin
+      currentUsers = currentUsers.filter((u: any) => u.id !== id && u.username !== 'admin');
+      (serverState as any).users = currentUsers;
+      savePersistedState(serverState);
+      return res.json({ success: true, users: currentUsers });
     } catch (e: any) {
       return res.status(500).json({ success: false, message: e.message });
     }
@@ -352,14 +391,70 @@ async function startServer() {
     return res.json({ success: true, samples: serverState.samples || [] });
   });
 
-  // Save/Update samples
+  // Save/Update a single sample or list of samples (Upsert without losing other users' data)
+  app.post('/api/samples/save', (req, res) => {
+    try {
+      const { sample, samples } = req.body;
+      let currentSamples = [...(serverState.samples || [])];
+
+      if (sample && typeof sample === 'object' && sample.id) {
+        const idx = currentSamples.findIndex((s: any) => s.id === sample.id);
+        if (idx >= 0) {
+          currentSamples[idx] = { ...currentSamples[idx], ...sample, updatedAt: new Date().toISOString() };
+        } else {
+          currentSamples = [sample, ...currentSamples];
+        }
+        serverState.samples = currentSamples;
+      } else if (Array.isArray(samples)) {
+        // Upsert array of samples
+        const sampleMap = new Map<string, any>();
+        currentSamples.forEach((s: any) => sampleMap.set(s.id, s));
+        samples.forEach((s: any) => {
+          if (s && s.id) {
+            sampleMap.set(s.id, s);
+          }
+        });
+        serverState.samples = Array.from(sampleMap.values());
+      } else {
+        return res.status(400).json({ success: false, message: 'Invalid sample payload' });
+      }
+
+      savePersistedState(serverState);
+      return res.json({ 
+        success: true, 
+        message: 'Đã lưu mẫu bê tông lên máy chủ trung tâm thành công', 
+        samples: serverState.samples 
+      });
+    } catch (e: any) {
+      return res.status(500).json({ success: false, message: e.message });
+    }
+  });
+
+  // Delete sample endpoint
+  app.post('/api/samples/delete', (req, res) => {
+    try {
+      const { id } = req.body;
+      if (!id) return res.status(400).json({ success: false, message: 'Missing sample ID' });
+      serverState.samples = (serverState.samples || []).filter((s: any) => s.id !== id);
+      savePersistedState(serverState);
+      return res.json({ 
+        success: true, 
+        message: 'Đã xóa mẫu bê tông khỏi máy chủ trung tâm', 
+        samples: serverState.samples 
+      });
+    } catch (e: any) {
+      return res.status(500).json({ success: false, message: e.message });
+    }
+  });
+
+  // Save/Update samples (Legacy bulk replace support)
   app.post('/api/samples', (req, res) => {
     try {
       const { samples } = req.body;
       if (Array.isArray(samples)) {
         serverState.samples = samples;
         savePersistedState(serverState);
-        return res.json({ success: true, count: samples.length });
+        return res.json({ success: true, count: samples.length, samples: serverState.samples });
       }
       return res.status(400).json({ success: false, message: 'Invalid samples array' });
     } catch (e: any) {
@@ -375,13 +470,21 @@ async function startServer() {
   // Save/Update stations
   app.post('/api/stations', (req, res) => {
     try {
-      const { stations } = req.body;
-      if (Array.isArray(stations)) {
+      const { stations, station } = req.body;
+      if (station && station.id) {
+        let currentStations = [...(serverState.stations || [])];
+        const idx = currentStations.findIndex((s: any) => s.id === station.id);
+        if (idx >= 0) {
+          currentStations[idx] = { ...currentStations[idx], ...station };
+        } else {
+          currentStations.push(station);
+        }
+        serverState.stations = currentStations;
+      } else if (Array.isArray(stations)) {
         serverState.stations = stations;
-        savePersistedState(serverState);
-        return res.json({ success: true, count: stations.length });
       }
-      return res.status(400).json({ success: false, message: 'Invalid stations array' });
+      savePersistedState(serverState);
+      return res.json({ success: true, count: serverState.stations.length, stations: serverState.stations });
     } catch (e: any) {
       return res.status(500).json({ success: false, message: e.message });
     }
@@ -394,20 +497,78 @@ async function startServer() {
       users: (serverState as any).users || [],
       samples: serverState.samples || [],
       stations: serverState.stations || [],
-      config: serverState.config
+      config: serverState.config,
+      lastCronDate: serverState.lastCronDate,
+      lastCronLog: serverState.lastCronLog,
+      timestamp: Date.now()
     });
   });
 
-  // 1. Sync State from Frontend to Server (Samples, Stations, Notification Config, Users)
+  // 1. Sync State from Frontend to Server (Smart merge or restore)
   app.post('/api/server-sync', (req, res) => {
     try {
-      const { samples, stations, config, users } = req.body;
-      if (Array.isArray(samples)) serverState.samples = samples;
-      if (Array.isArray(stations)) serverState.stations = stations;
-      if (Array.isArray(users)) (serverState as any).users = users;
-      if (config && typeof config === 'object') {
-        serverState.config = { ...serverState.config, ...config };
+      const { samples, stations, config, users, action } = req.body;
+
+      if (action === 'restore_full_backup') {
+        // Complete full overwrite on intentional backup restore
+        if (Array.isArray(samples)) serverState.samples = samples;
+        if (Array.isArray(stations)) serverState.stations = stations;
+        if (Array.isArray(users)) (serverState as any).users = users;
+        if (config && typeof config === 'object') {
+          serverState.config = { ...serverState.config, ...config };
+        }
+      } else {
+        // Smart merge: merge incoming items by ID without destroying existing items
+        if (Array.isArray(samples) && samples.length > 0) {
+          const sampleMap = new Map<string, any>();
+          // Existing server samples
+          (serverState.samples || []).forEach((s: any) => sampleMap.set(s.id, s));
+          // Incoming samples (update or insert)
+          samples.forEach((s: any) => {
+            if (s && s.id) {
+              const existing = sampleMap.get(s.id);
+              if (!existing) {
+                sampleMap.set(s.id, s);
+              } else {
+                // If incoming has newer update, take it
+                const existingTime = new Date(existing.updatedAt || existing.createdAt || 0).getTime();
+                const incomingTime = new Date(s.updatedAt || s.createdAt || 0).getTime();
+                if (incomingTime >= existingTime) {
+                  sampleMap.set(s.id, { ...existing, ...s });
+                }
+              }
+            }
+          });
+          serverState.samples = Array.from(sampleMap.values());
+        }
+
+        if (Array.isArray(users) && users.length > 0) {
+          const userMap = new Map<string, any>();
+          ((serverState as any).users || []).forEach((u: any) => userMap.set(u.id || u.username, u));
+          users.forEach((u: any) => {
+            if (u && (u.id || u.username)) {
+              userMap.set(u.id || u.username, u);
+            }
+          });
+          (serverState as any).users = Array.from(userMap.values());
+        }
+
+        if (Array.isArray(stations) && stations.length > 0) {
+          const stationMap = new Map<string, any>();
+          (serverState.stations || []).forEach((st: any) => stationMap.set(st.id, st));
+          stations.forEach((st: any) => {
+            if (st && st.id) {
+              stationMap.set(st.id, st);
+            }
+          });
+          serverState.stations = Array.from(stationMap.values());
+        }
+
+        if (config && typeof config === 'object') {
+          serverState.config = { ...serverState.config, ...config };
+        }
       }
+
       savePersistedState(serverState);
 
       return res.status(200).json({
@@ -416,7 +577,8 @@ async function startServer() {
         config: serverState.config,
         users: (serverState as any).users || [],
         samples: serverState.samples,
-        stations: serverState.stations
+        stations: serverState.stations,
+        timestamp: Date.now()
       });
     } catch (e: any) {
       return res.status(500).json({ success: false, message: e.message });

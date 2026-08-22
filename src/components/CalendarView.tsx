@@ -222,6 +222,23 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
           {/* Navigation Controls */}
           <div className="flex flex-wrap items-center gap-2 sm:gap-3">
             
+            {/* Station Filter for Calendar */}
+            <div className="flex items-center gap-1.5 bg-slate-50 px-2.5 py-1.5 rounded-xl border border-slate-200">
+              <Building2 className="w-3.5 h-3.5 text-emerald-700 shrink-0" />
+              <select
+                value={filterStationLocal}
+                onChange={(e) => setFilterStationLocal(e.target.value)}
+                className="bg-white border border-slate-200 font-bold text-xs text-slate-800 rounded-lg px-2 py-1 outline-none focus:ring-2 focus:ring-emerald-500 cursor-pointer shadow-xs max-w-[180px] truncate"
+              >
+                <option value="all">🏢 Tất cả các trạm ({stations.length})</option>
+                {stations.map(st => (
+                  <option key={st.id} value={st.id}>
+                    {st.name.replace('Trạm Tasago ', '')}
+                  </option>
+                ))}
+              </select>
+            </div>
+
             {/* Month & Year Selectors */}
             <div className="flex items-center space-x-1.5 bg-slate-50 p-1 rounded-xl border border-slate-200">
               <button
