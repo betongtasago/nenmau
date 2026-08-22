@@ -141,12 +141,12 @@ export function getCurrentUser(): User | null {
   try {
     const raw = localStorage.getItem(STORAGE_KEYS.CURRENT_USER);
     if (!raw) {
-      // Default to admin for immediate convenience if not logged in
-      return INITIAL_USERS[0];
+      // Do NOT default to admin. Strangers / unauthenticated visitors must start logged out.
+      return null;
     }
     return JSON.parse(raw);
   } catch {
-    return INITIAL_USERS[0];
+    return null;
   }
 }
 

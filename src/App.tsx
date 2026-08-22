@@ -77,7 +77,18 @@ export default function App() {
 
   // UI state & ViewMode (Mobile / PC / Auto)
   const [viewMode, setViewMode] = useState<ViewMode>(() => loadViewMode());
-  const [selectedStationId, setSelectedStationId] = useState<string>('all');
+  const [selectedStationId, setSelectedStationId] = useState<string>(() => {
+    const user = getCurrentUser();
+    if (user && user.role === 'member') {
+      const memberStation = user.stationId || (user.stationIds && user.stationIds[0] !== 'all' ? user.stationIds[0] : '');
+      if (memberStation) return memberStation;
+    }
+    try {
+      const saved = localStorage.getItem('tasago_selected_station_v3');
+      if (saved) return saved;
+    } catch {}
+    return 'all';
+  });
   const [activeTab, setActiveTab] = useState<'samples' | 'calendar' | 'analytics' | 'reports'>('samples');
   
   // Modals state
@@ -118,10 +129,27 @@ export default function App() {
     saveViewMode(newMode);
   };
 
-  // If user is station member, default filter to their station
+  const handleSelectStation = (stationId: string) => {
+    setSelectedStationId(stationId);
+    try {
+      localStorage.setItem('tasago_selected_station_v3', stationId);
+    } catch {}
+  };
+
+  // If user is station member, ensure default filter to their station on load / F5 / user change
   useEffect(() => {
-    if (currentUser && currentUser.role === 'member' && currentUser.stationId) {
-      setSelectedStationId(currentUser.stationId);
+    if (currentUser) {
+      if (currentUser.role === 'member') {
+        const memberStation = currentUser.stationId || (currentUser.stationIds && currentUser.stationIds[0] !== 'all' ? currentUser.stationIds[0] : '');
+        if (memberStation) {
+          setSelectedStationId(memberStation);
+        }
+      } else {
+        const saved = localStorage.getItem('tasago_selected_station_v3');
+        if (saved) {
+          setSelectedStationId(saved);
+        }
+      }
     }
   }, [currentUser]);
 
@@ -348,26 +376,19 @@ export default function App() {
   }, [fetchServerSync]);
 
   // Initial load from server and periodic fallback polling
+  // NOTE: Automated 07:00 AM notifications are processed strictly by the server backend cron.
+  // We do NOT fire automated emails on client page visits or intervals to prevent unsolicited email sending.
   useEffect(() => {
-    // 1. Initial fetch from server
+    // Initial fetch from server
     fetchServerSync();
 
-    // 2. Automated background notification check
-    if (currentUser) {
-      checkAndTriggerAutoNotifications(samples, stations, notificationConfig).catch(console.error);
-    }
-
-    // 3. Interval check every 8 seconds as secondary fallback
+    // Periodic sync every 10 seconds as secondary fallback
     const timer = setInterval(() => {
       fetchServerSync();
-      const currentSamples = recalculateSampleStatuses(loadSamples());
-      if (currentUser) {
-        checkAndTriggerAutoNotifications(currentSamples, stations, notificationConfig).catch(console.error);
-      }
-    }, 8000);
+    }, 10000);
 
     return () => clearInterval(timer);
-  }, [currentUser, fetchServerSync]);
+  }, [fetchServerSync]);
 
   const handleRequestPushPermission = async () => {
     const granted = await requestBrowserNotificationPermission();
@@ -382,11 +403,12 @@ export default function App() {
   const handleLogin = (user: User) => {
     setCurrentUser(user);
     saveCurrentUserToStorage(user);
-    const targetStation = user.stationId || (user.stationIds && user.stationIds[0] !== 'all' ? user.stationIds[0] : '');
-    if (user.role === 'member' && targetStation) {
-      setSelectedStationId(targetStation);
+    const memberStation = user.stationId || (user.stationIds && user.stationIds[0] !== 'all' ? user.stationIds[0] : '');
+    if (user.role === 'member' && memberStation) {
+      handleSelectStation(memberStation);
     } else {
-      setSelectedStationId('all');
+      const saved = localStorage.getItem('tasago_selected_station_v3');
+      handleSelectStation(saved || 'all');
     }
   };
 
@@ -394,6 +416,7 @@ export default function App() {
   const handleLogout = () => {
     setCurrentUser(null);
     saveCurrentUserToStorage(null);
+    setSelectedStationId('all');
   };
 
   // Handler: Save Sample (Create or Edit)
@@ -801,7 +824,7 @@ export default function App() {
         currentUser={currentUser}
         stations={stations}
         selectedStationId={selectedStationId}
-        onSelectStation={setSelectedStationId}
+        onSelectStation={handleSelectStation}
         activeTab={activeTab}
         onChangeTab={setActiveTab}
         onLogout={handleLogout}
