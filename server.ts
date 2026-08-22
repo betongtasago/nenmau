@@ -38,7 +38,25 @@ interface ServerState {
   lastCronLog: string;
 }
 
-const stateFilePath = path.join(__dirname, 'data', 'server-state.json');
+// ============================================================
+// DATA STORAGE
+// ============================================================
+// Có thể cấu hình thư mục lưu dữ liệu bằng biến môi trường:
+// DATA_DIR=/var/lib/nenmau/data
+//
+// Nếu không cấu hình:
+// - Development: ./data
+// - Production: ./data
+//
+// LƯU Ý: Vercel filesystem không phải persistent database.
+// ============================================================
+
+const DATA_DIR = process.env.DATA_DIR
+  ? path.resolve(process.env.DATA_DIR)
+  : path.join(process.cwd(), 'data');
+
+const stateFilePath = path.join(DATA_DIR, 'server-state.json');
+const tempStateFilePath = path.join(DATA_DIR, 'server-state.json.tmp');
 
 function loadPersistedState(): ServerState {
   try {
@@ -86,16 +104,61 @@ function loadPersistedState(): ServerState {
   return defaultState;
 }
 
+// ============================================================
+// SAFE PERSISTENCE
+// ============================================================
+//
+// Ghi file theo kiểu atomic:
+// 1. Ghi vào file .tmp
+// 2. fsync
+// 3. rename sang file chính
+//
+// Nếu server chết giữa lúc ghi, khả năng làm hỏng JSON
+// sẽ thấp hơn rất nhiều.
+// ============================================================
+
+let saveQueue: Promise<void> = Promise.resolve();
+
+function queuePersistedState(state: ServerState): Promise<void> {
+  saveQueue = saveQueue
+    .then(async () => {
+      try {
+        if (!fs.existsSync(DATA_DIR)) {
+          fs.mkdirSync(DATA_DIR, { recursive: true });
+        }
+
+        const json = JSON.stringify(state, null, 2);
+
+        const fd = fs.openSync(tempStateFilePath, 'w');
+
+        try {
+          fs.writeSync(fd, json, 0, 'utf8');
+          fs.fsyncSync(fd);
+        } finally {
+          fs.closeSync(fd);
+        }
+
+        fs.renameSync(tempStateFilePath, stateFilePath);
+      } catch (error) {
+        console.error(
+          '[STATE SAVE ERROR]',
+          error
+        );
+      }
+    })
+    .catch(error => {
+      console.error(
+        '[STATE QUEUE ERROR]',
+        error
+      );
+    });
+
+  return saveQueue;
+}
+
+// Giữ lại tên cũ để toàn bộ code hiện tại không phải sửa.
 function savePersistedState(state: ServerState) {
-  try {
-    const dir = path.dirname(stateFilePath);
-    if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true });
-    }
-    fs.writeFileSync(stateFilePath, JSON.stringify(state, null, 2), 'utf8');
-  } catch (e) {
-    console.warn('Could not save server-state.json:', e);
-  }
+  void queuePersistedState(state);
 }
 
 let serverState: ServerState = loadPersistedState();
