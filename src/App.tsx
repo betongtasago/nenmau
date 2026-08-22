@@ -40,6 +40,7 @@ import {
   Sparkles,
   Phone,
   LayoutGrid,
+  Calendar,
   CalendarDays,
   Plus,
   BarChart3,
@@ -96,6 +97,17 @@ export default function App() {
   const [userManagementTab, setUserManagementTab] = useState<'users' | 'stations'>('stations');
   const [isGitHubExportModalOpen, setIsGitHubExportModalOpen] = useState(false);
   const [showAutoAlertBanner, setShowAutoAlertBanner] = useState(true);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [lastSyncedAt, setLastSyncedAt] = useState<Date>(new Date());
+  const [newScheduleToast, setNewScheduleToast] = useState<{
+    id: string;
+    sampleCode: string;
+    projectName: string;
+    scheduledTestDate: string;
+    createdByName: string;
+    stationName: string;
+  } | null>(null);
+
   const [browserNotificationGranted, setBrowserNotificationGranted] = useState(() => {
     return typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted';
   });
@@ -113,11 +125,14 @@ export default function App() {
   }, [currentUser]);
 
   // Two-way Real-time synchronization helper: Pull latest state from backend server
-  const fetchServerSync = useCallback(async () => {
+  const fetchServerSync = useCallback(async (isManual = false) => {
     try {
+      if (isManual) setIsSyncing(true);
       const res = await fetch('/api/server-sync');
       if (res.ok) {
         const data = await res.json();
+        setLastSyncedAt(new Date());
+
         if (data.users && Array.isArray(data.users) && data.users.length > 0) {
           setUsers(prev => {
             if (JSON.stringify(prev) !== JSON.stringify(data.users)) {
@@ -127,18 +142,37 @@ export default function App() {
             return prev;
           });
         }
+
         if (data.samples && Array.isArray(data.samples) && data.samples.length > 0) {
+          const recalced = recalculateSampleStatuses(data.samples);
           setSamples(prev => {
-            const currentJson = JSON.stringify(prev);
-            const serverJson = JSON.stringify(data.samples);
-            if (currentJson !== serverJson) {
-              const recalced = recalculateSampleStatuses(data.samples);
+            // Check if there are newly added samples not previously in state
+            const prevIds = new Set(prev.map(s => s.id));
+            const newSamples = recalced.filter(s => !prevIds.has(s.id));
+            if (newSamples.length > 0 && prev.length > 0) {
+              const newest = newSamples[0];
+              // If created by another user or system, alert the current user
+              if (currentUser && newest.createdBy !== currentUser.username) {
+                const targetStation = data.stations?.find((st: Station) => st.id === newest.stationId)?.name || 'Trạm Tasago';
+                setNewScheduleToast({
+                  id: newest.id,
+                  sampleCode: newest.sampleCode,
+                  projectName: newest.projectName,
+                  scheduledTestDate: newest.scheduledTestDate,
+                  createdByName: newest.createdByName || newest.samplerName || 'Thành viên trạm',
+                  stationName: targetStation.replace('Trạm Tasago ', ''),
+                });
+              }
+            }
+
+            if (JSON.stringify(prev) !== JSON.stringify(recalced)) {
               saveSamples(recalced);
               return recalced;
             }
             return prev;
           });
         }
+
         if (data.stations && Array.isArray(data.stations) && data.stations.length > 0) {
           setStations(prev => {
             if (JSON.stringify(prev) !== JSON.stringify(data.stations)) {
@@ -148,6 +182,7 @@ export default function App() {
             return prev;
           });
         }
+
         if (data.config && typeof data.config === 'object') {
           setNotificationConfig(prev => {
             if (JSON.stringify(prev) !== JSON.stringify(data.config)) {
@@ -160,8 +195,48 @@ export default function App() {
       }
     } catch (err) {
       // Offline fallback
+    } finally {
+      if (isManual) {
+        setTimeout(() => setIsSyncing(false), 400);
+      }
     }
-  }, []);
+  }, [currentUser]);
+
+  // Real-time broadcast channel for multi-tab zero-latency sync
+  useEffect(() => {
+    let channel: BroadcastChannel | null = null;
+    try {
+      if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+        channel = new BroadcastChannel('tasago_realtime_sync');
+        channel.onmessage = (event) => {
+          if (event.data && event.data.type === 'SYNC_NOW') {
+            fetchServerSync();
+          }
+        };
+      }
+    } catch (e) {
+      // ignore
+    }
+
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === 'tasago_concrete_samples_v2' || e.key === 'tasago_stations_v2') {
+        fetchServerSync();
+      }
+    };
+
+    const handleWindowFocus = () => {
+      fetchServerSync();
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+    window.addEventListener('focus', handleWindowFocus);
+
+    return () => {
+      channel?.close();
+      window.removeEventListener('storage', handleStorageChange);
+      window.removeEventListener('focus', handleWindowFocus);
+    };
+  }, [fetchServerSync]);
 
   // Initial load from server and periodic polling for real-time multi-device sync
   useEffect(() => {
@@ -616,7 +691,62 @@ export default function App() {
         urgentCount={urgentCount}
         viewMode={viewMode}
         onChangeViewMode={handleViewModeChange}
+        onManualSync={() => fetchServerSync(true)}
+        isSyncing={isSyncing}
+        lastSyncedAt={lastSyncedAt}
       />
+
+      {/* Real-time Toast Notification when a member creates a new schedule */}
+      {newScheduleToast && (
+        <div className="fixed bottom-24 right-4 sm:right-8 z-50 max-w-md bg-white border-2 border-emerald-500 rounded-2xl shadow-2xl p-4 animate-in slide-in-from-bottom-5 duration-300">
+          <div className="flex items-start justify-between gap-3">
+            <div className="w-10 h-10 rounded-xl bg-emerald-100 flex items-center justify-center shrink-0 text-emerald-800 font-bold">
+              <Calendar className="w-5 h-5" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2">
+                <span className="bg-emerald-600 text-white text-[10px] font-black uppercase px-2 py-0.5 rounded-full animate-pulse">
+                  Mới Tạo Trực Tiếp
+                </span>
+                <span className="text-[11px] font-semibold text-slate-500">
+                  {newScheduleToast.stationName}
+                </span>
+              </div>
+              <h4 className="font-black text-sm text-slate-900 mt-1 truncate">
+                {newScheduleToast.projectName}
+              </h4>
+              <p className="text-xs text-slate-600 mt-0.5">
+                Kỹ thuật viên <strong>{newScheduleToast.createdByName}</strong> vừa thêm lịch nén ngày <strong>{newScheduleToast.scheduledTestDate.split('-').reverse().join('/')}</strong>
+              </p>
+              <div className="mt-2.5 flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActiveTab('calendar');
+                    setNewScheduleToast(null);
+                  }}
+                  className="bg-emerald-700 hover:bg-emerald-600 text-white text-xs font-bold px-3 py-1.5 rounded-xl transition-colors cursor-pointer shadow-xs"
+                >
+                  Xem Trên Lịch Nén
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setNewScheduleToast(null)}
+                  className="bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold px-2.5 py-1.5 rounded-xl transition-colors cursor-pointer"
+                >
+                  Đóng
+                </button>
+              </div>
+            </div>
+            <button
+              onClick={() => setNewScheduleToast(null)}
+              className="text-slate-400 hover:text-slate-600 p-1"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Main Container */}
       <main className={`flex-1 w-full mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-6 space-y-4 sm:space-y-6 ${

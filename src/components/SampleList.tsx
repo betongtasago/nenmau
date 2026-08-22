@@ -125,8 +125,8 @@ export const SampleList: React.FC<SampleListProps> = ({
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [ageFilter, setAgeFilter] = useState<string>('all');
   const [gradeFilter, setGradeFilter] = useState<string>('all');
-  const [sortField, setSortField] = useState<'scheduledTestDate' | 'castDate' | 'projectName'>('scheduledTestDate');
-  const [sortAsc, setSortAsc] = useState<boolean>(true);
+  const [sortField, setSortField] = useState<'createdAt' | 'scheduledTestDate' | 'castDate' | 'projectName'>('createdAt');
+  const [sortAsc, setSortAsc] = useState<boolean>(false);
 
   // Available grades for filter
   const availableGrades = useMemo(() => {
@@ -167,8 +167,9 @@ export const SampleList: React.FC<SampleListProps> = ({
         const matchPhone = item.contactPhone?.includes(q);
         const matchStation = station?.name.toLowerCase().includes(q);
         const matchSampler = item.samplerName?.toLowerCase().includes(q);
+        const matchCreator = item.createdByName?.toLowerCase().includes(q);
         const matchComponent = item.component?.toLowerCase().includes(q);
-        return matchProject || matchContractor || matchCode || matchContact || matchPhone || matchStation || matchSampler || matchComponent;
+        return matchProject || matchContractor || matchCode || matchContact || matchPhone || matchStation || matchSampler || matchCreator || matchComponent;
       }
       return true;
     }).sort((a, b) => {
@@ -227,7 +228,7 @@ export const SampleList: React.FC<SampleListProps> = ({
         </div>
 
         {/* Filter Controls Row */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2 text-xs">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-2 text-xs">
           
           {/* Search Box */}
           <div className="relative lg:col-span-2">
@@ -296,9 +297,41 @@ export const SampleList: React.FC<SampleListProps> = ({
             </select>
           </div>
 
+          {/* Sort Order Selector */}
+          <div>
+            <select
+              value={`${sortField}_${sortAsc ? 'asc' : 'desc'}`}
+              onChange={(e) => {
+                const [f, d] = e.target.value.split('_');
+                setSortField(f as any);
+                setSortAsc(d === 'asc');
+              }}
+              className="w-full py-2 px-2.5 bg-emerald-50/70 border border-emerald-300 rounded-lg text-xs font-bold text-emerald-900 focus:ring-1 focus:ring-emerald-500 cursor-pointer"
+            >
+              <option value="createdAt_desc">✨ Mới tạo gần đây</option>
+              <option value="scheduledTestDate_asc">🗓️ Ngày nén (Sớm nhất)</option>
+              <option value="scheduledTestDate_desc">🗓️ Ngày nén (Muộn nhất)</option>
+              <option value="castDate_desc">📅 Ngày đúc (Mới nhất)</option>
+              <option value="projectName_asc">🏢 Tên công trình (A-Z)</option>
+            </select>
+          </div>
+
         </div>
 
       </div>
+
+      {/* Station Filter Active Notice */}
+      {selectedStationId !== 'all' && (
+        <div className="bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-2 text-xs flex items-center justify-between text-emerald-900">
+          <div className="flex items-center gap-1.5 font-medium">
+            <Building2 className="w-4 h-4 text-emerald-700" />
+            <span>Đang xem danh sách mẫu của <strong>{stationMap.get(selectedStationId)?.name || selectedStationId}</strong></span>
+          </div>
+          <span className="text-[11px] text-emerald-700">
+            Có <strong>{filteredSamples.length}</strong> / {samples.length} mẫu toàn hệ thống
+          </span>
+        </div>
+      )}
 
       {/* Empty State */}
       {filteredSamples.length === 0 && (
