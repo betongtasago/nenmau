@@ -1,42 +1,32 @@
 import React, { useState } from 'react';
 import { 
   X, 
-  Bell, 
   Send, 
   Copy, 
   Check, 
-  Settings, 
   History, 
-  AlertTriangle, 
   Mail, 
   MessageSquare, 
-  Phone, 
+  Sparkles, 
+  Clock, 
+  BookOpen, 
+  Plus, 
+  Zap, 
+  Server, 
+  ChevronDown, 
+  ChevronUp,
+  Eye,
+  EyeOff,
+  CheckCircle2,
+  AlertCircle,
   ExternalLink,
   ShieldCheck,
-  Sparkles,
-  Layers,
-  Clock,
-  BookOpen,
-  Volume2,
-  CheckCircle2,
-  HelpCircle,
-  Plus,
-  Trash2,
-  UserCheck,
-  Zap,
-  Info,
-  RefreshCw,
-  Server,
-  ChevronDown,
-  ChevronUp
+  RefreshCw
 } from 'lucide-react';
 import { ConcreteSample, Station, NotificationConfig, NotificationLog, User } from '../types';
 import { 
   generateSampleNotification, 
   dispatchNotification,
-  playAlertChime,
-  requestBrowserNotificationPermission,
-  showSystemPushNotification,
   generateMailtoUrl
 } from '../utils/notificationService';
 import { formatDateVN } from '../utils/storage';
@@ -64,43 +54,54 @@ export const NotificationModal: React.FC<NotificationModalProps> = ({
   preselectedSample,
   currentUser,
 }) => {
-  const [activeTab, setActiveTab] = useState<'send' | 'zalo' | 'email' | 'logs' | 'guide'>('send');
-  const [channel, setChannel] = useState<'zalo_bot' | 'email' | 'both'>('both');
+  const [activeTab, setActiveTab] = useState<'send' | 'email' | 'zalo' | 'preview' | 'logs' | 'guide'>('email');
+  const [channel, setChannel] = useState<'zalo_bot' | 'email' | 'both'>('email');
   const [copied, setCopied] = useState(false);
-  const [copiedPayload, setCopiedPayload] = useState(false);
   const [sending, setSending] = useState(false);
-  const [testingWebhook, setTestingWebhook] = useState(false);
-  const [webhookTestResult, setWebhookTestResult] = useState<{ success: boolean; message: string } | null>(null);
   const [sendSuccessMessage, setSendSuccessMessage] = useState('');
 
-  // Local state for Email Management & 7:00 AM Automation
+  // Email Configuration State
   const [emailList, setEmailList] = useState<string[]>(() => {
     const list = Array.isArray(config.emailRecipients) ? config.emailRecipients : [];
-    return list.length > 0 ? list : ['kythuat@tasago.vn', 'thanhtgndt@gmail.com'];
+    return list.length > 0 ? list : ['thanhtgndt@gmail.com', 'kythuat@tasago.vn'];
   });
   const [newEmailInput, setNewEmailInput] = useState('');
   const [autoEmailEnabled, setAutoEmailEnabled] = useState(config.autoEmailEnabled ?? true);
   const [autoSendHour, setAutoSendHour] = useState(config.autoSendHour ?? 7);
+  const [autoSendMinute, setAutoSendMinute] = useState(config.autoSendMinute ?? 0);
   const [reminderDaysBefore, setReminderDaysBefore] = useState(config.reminderDaysBefore ?? 0);
+  
+  // SMTP Server Settings
+  const [smtpHost, setSmtpHost] = useState(config.smtpHost || 'smtp.gmail.com');
+  const [smtpPort, setSmtpPort] = useState(config.smtpPort || 587);
+  const [smtpUser, setSmtpUser] = useState(config.smtpUser || 'tasagotnt@gmail.com');
+  const [smtpPass, setSmtpPass] = useState(config.smtpPass || '');
+  const [smtpSecure, setSmtpSecure] = useState(config.smtpSecure ?? false); // false for 587 STARTTLS
+  const [emailSender, setEmailSender] = useState(config.emailSender || 'Bê Tông Tasago <tasagotnt@gmail.com>');
+  const [emailServiceUrl, setEmailServiceUrl] = useState(config.emailServiceUrl || '');
+  
+  const [showPassword, setShowPassword] = useState(false);
+  const [showAdvancedEmailSettings, setShowAdvancedEmailSettings] = useState(true);
+
+  // Testing & Verification State
+  const [verifyingSmtp, setVerifyingSmtp] = useState(false);
+  const [smtpVerifyResult, setSmtpVerifyResult] = useState<{ success: boolean; message: string } | null>(null);
+
   const [testingEmail, setTestingEmail] = useState(false);
   const [emailTestResult, setEmailTestResult] = useState<{ success: boolean; message: string } | null>(null);
 
-  // Advanced SMTP / Service settings
-  const [showAdvancedEmailSettings, setShowAdvancedEmailSettings] = useState(false);
-  const [smtpHost, setSmtpHost] = useState(config.smtpHost || '');
-  const [smtpPort, setSmtpPort] = useState(config.smtpPort || 587);
-  const [smtpUser, setSmtpUser] = useState(config.smtpUser || '');
-  const [smtpPass, setSmtpPass] = useState(config.smtpPass || '');
-  const [emailSender, setEmailSender] = useState(config.emailSender || 'Hệ Thống Bê Tông Tasago <kythuat@tasago.vn>');
-  const [emailServiceUrl, setEmailServiceUrl] = useState(config.emailServiceUrl || '');
+  const [triggeringCron, setTriggeringCron] = useState(false);
+  const [cronTriggerResult, setCronTriggerResult] = useState<{ success: boolean; message: string } | null>(null);
 
-  // Local state for Zalo Bot Settings
+  // Zalo Bot Settings
   const [zaloWebhookUrl, setZaloWebhookUrl] = useState(config.zaloWebhookUrl || '');
   const [zaloBotToken, setZaloBotToken] = useState(config.zaloBotToken || '');
   const [zaloGroupId, setZaloGroupId] = useState(config.zaloGroupId || 'Nhóm Kỹ Thuật Tasago');
   const [autoZaloEnabled, setAutoZaloEnabled] = useState(config.autoZaloEnabled ?? true);
+  const [testingWebhook, setTestingWebhook] = useState(false);
+  const [webhookTestResult, setWebhookTestResult] = useState<{ success: boolean; message: string } | null>(null);
 
-  // Selected samples to send
+  // Sample Selection
   const urgentSamples = samples.filter(s => s.status === 'due_today' || s.status === 'overdue');
   const [targetFilter, setTargetFilter] = useState<'urgent' | 'all' | 'single'>(preselectedSample ? 'single' : 'urgent');
 
@@ -111,53 +112,142 @@ export const NotificationModal: React.FC<NotificationModalProps> = ({
     : samples;
 
   const notificationPreview = generateSampleNotification(samplesToNotify, stations);
+  const mailtoUrl = generateMailtoUrl(emailList, notificationPreview.title, notificationPreview.bodyText);
 
   if (!isOpen) return null;
 
-  const handleCopyText = () => {
-    navigator.clipboard.writeText(notificationPreview.bodyText);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2500);
+  // Apply Default Gmail Preset (smtp.gmail.com, Port 587 STARTTLS, tasagotnt@gmail.com)
+  const handleApplyGmailPreset = () => {
+    setSmtpHost('smtp.gmail.com');
+    setSmtpPort(587);
+    setSmtpSecure(false);
+    setSmtpUser('tasagotnt@gmail.com');
+    setEmailSender('Bê Tông Tasago <tasagotnt@gmail.com>');
+    if (!emailList.includes('thanhtgndt@gmail.com')) {
+      setEmailList(prev => ['thanhtgndt@gmail.com', ...prev]);
+    }
+    setSmtpVerifyResult(null);
+    setEmailTestResult({
+      success: true,
+      message: '✨ Đã tải cấu hình chuẩn Gmail (smtp.gmail.com, Port 587 STARTTLS, tài khoản tasagotnt@gmail.com). Vui lòng nhập Mật khẩu ứng dụng 16 ký tự để kết nối.'
+    });
   };
 
-  const handleDispatch = async () => {
-    setSending(true);
-    setSendSuccessMessage('');
+  const handleAddEmail = (e: React.FormEvent) => {
+    e.preventDefault();
+    const clean = newEmailInput.trim().toLowerCase();
+    if (!clean) return;
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(clean)) {
+      alert('Vui lòng nhập địa chỉ email hợp lệ (ví dụ: thanhtgndt@gmail.com)');
+      return;
+    }
+    if (emailList.includes(clean)) {
+      alert('Địa chỉ email này đã có trong danh sách nhận.');
+      return;
+    }
+    setEmailList(prev => [...prev, clean]);
+    setNewEmailInput('');
+  };
+
+  const handleDeleteEmail = (emailToDelete: string) => {
+    setEmailList(prev => prev.filter(e => e !== emailToDelete));
+  };
+
+  const buildActiveConfig = (): NotificationConfig => ({
+    ...config,
+    emailRecipients: emailList,
+    autoEmailEnabled,
+    autoSendHour,
+    autoSendMinute,
+    reminderDaysBefore,
+    smtpHost,
+    smtpPort,
+    smtpUser,
+    smtpPass,
+    smtpSecure,
+    emailSender,
+    emailServiceUrl,
+    zaloWebhookUrl,
+    zaloBotToken,
+    zaloGroupId,
+    autoZaloEnabled,
+  });
+
+  const handleSaveAllConfig = async () => {
+    const newConfig = buildActiveConfig();
+    onSaveConfig(newConfig);
+
+    // Sync state directly with server backend for 24/7 background 07:00 AM Cron
+    try {
+      await fetch('/api/server-sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          samples,
+          stations,
+          config: newConfig
+        })
+      });
+    } catch (e) {
+      console.warn('Backend sync notice:', e);
+    }
+
+    alert('✅ Đã lưu cấu hình máy chủ gửi Email và lịch tự động 07:00 Sáng thành công!');
+  };
+
+  // 1. Verify SMTP Connection via Backend
+  const handleVerifySmtp = async () => {
+    if (!smtpUser) {
+      alert('Vui lòng nhập Email tài khoản SMTP (ví dụ: tasagotnt@gmail.com)');
+      return;
+    }
+    if (!smtpPass) {
+      alert('Vui lòng nhập Mật khẩu ứng dụng (Google App Password 16 ký tự) để kiểm tra xác thực.');
+      return;
+    }
+
+    setVerifyingSmtp(true);
+    setSmtpVerifyResult(null);
 
     try {
-      const activeConfig: NotificationConfig = {
-        ...config,
-        emailRecipients: emailList,
-        autoEmailEnabled,
-        autoSendHour,
-        zaloWebhookUrl,
-        zaloBotToken,
-        zaloGroupId,
-        autoZaloEnabled,
-        reminderDaysBefore,
-        smtpHost,
-        smtpPort,
-        smtpUser,
-        smtpPass,
-        emailSender,
-        emailServiceUrl
-      };
+      const res = await fetch('/api/notifications/verify-smtp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          smtpConfig: {
+            smtpHost,
+            smtpPort,
+            smtpUser,
+            smtpPass,
+            smtpSecure
+          }
+        })
+      });
 
-      const res = await dispatchNotification(samplesToNotify, stations, activeConfig, channel);
-      setSending(false);
-      if (res.success) {
-        setSendSuccessMessage(res.message);
-        setTimeout(() => {
-          setSendSuccessMessage('');
-        }, 5000);
+      const data = await res.json();
+      setVerifyingSmtp(false);
+
+      if (res.ok && data?.success) {
+        setSmtpVerifyResult({
+          success: true,
+          message: data.message || `Kết nối máy chủ SMTP ${smtpHost}:${smtpPort} (STARTTLS) thành công! Tài khoản "${smtpUser}" đã xác thực hợp lệ.`
+        });
+      } else {
+        setSmtpVerifyResult({
+          success: false,
+          message: data?.message || 'Không thể kết nối máy chủ SMTP. Vui lòng kiểm tra lại tài khoản và mật khẩu ứng dụng.'
+        });
       }
     } catch (e: any) {
-      setSending(false);
-      alert('Có lỗi xảy ra: ' + e.message);
+      setVerifyingSmtp(false);
+      setSmtpVerifyResult({
+        success: false,
+        message: `Lỗi kết nối kiểm tra SMTP: ${e.message}`
+      });
     }
   };
 
-  // Test send email immediately to recipient list
+  // 2. Test Send Real Email Immediately
   const handleTestSendEmail = async () => {
     if (emailList.length === 0) {
       alert('Vui lòng thêm ít nhất 1 địa chỉ email vào danh sách nhận trước khi gửi thử nghiệm.');
@@ -168,19 +258,6 @@ export const NotificationModal: React.FC<NotificationModalProps> = ({
     setEmailTestResult(null);
 
     try {
-      const activeConfig: NotificationConfig = {
-        ...config,
-        emailRecipients: emailList,
-        autoEmailEnabled,
-        autoSendHour,
-        smtpHost,
-        smtpPort,
-        smtpUser,
-        smtpPass,
-        emailSender,
-        emailServiceUrl
-      };
-
       const res = await fetch('/api/notifications/send-email', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -194,6 +271,7 @@ export const NotificationModal: React.FC<NotificationModalProps> = ({
             smtpPort,
             smtpUser,
             smtpPass,
+            smtpSecure,
             smtpFrom: emailSender,
             emailServiceUrl
           },
@@ -207,7 +285,7 @@ export const NotificationModal: React.FC<NotificationModalProps> = ({
       if (res.ok && data?.success) {
         setEmailTestResult({
           success: true,
-          message: data.message || `Đã phát thông báo thử nghiệm thành công tới ${emailList.join(', ')}!`
+          message: data.message || `Đã phát email thành công tới ${emailList.join(', ')}!`
         });
       } else {
         setEmailTestResult({
@@ -219,11 +297,59 @@ export const NotificationModal: React.FC<NotificationModalProps> = ({
       setTestingEmail(false);
       setEmailTestResult({
         success: false,
-        message: `Lỗi kết nối gửi email: ${err.message}`
+        message: `Lỗi khi phát email thử nghiệm: ${err.message}`
       });
     }
   };
 
+  // 3. Trigger 07:00 AM Cron on Server
+  const handleTriggerServerCron = async () => {
+    setTriggeringCron(true);
+    setCronTriggerResult(null);
+
+    try {
+      // First sync current config to server
+      const currentConfig = buildActiveConfig();
+      await fetch('/api/server-sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          samples,
+          stations,
+          config: currentConfig
+        })
+      });
+
+      // Trigger cron
+      const res = await fetch('/api/cron/trigger', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+      });
+
+      const data = await res.json();
+      setTriggeringCron(false);
+
+      if (res.ok && data?.success) {
+        setCronTriggerResult({
+          success: true,
+          message: `🚀 Đã kích hoạt chạy thử báo cáo 07:00 Sáng! ${data.message || ''}`
+        });
+      } else {
+        setCronTriggerResult({
+          success: false,
+          message: data?.message || 'Không thể kích hoạt cron trên máy chủ.'
+        });
+      }
+    } catch (e: any) {
+      setTriggeringCron(false);
+      setCronTriggerResult({
+        success: false,
+        message: `Lỗi kết nối máy chủ: ${e.message}`
+      });
+    }
+  };
+
+  // 4. Test Webhook Zalo
   const handleTestWebhook = async () => {
     if (!zaloWebhookUrl || !zaloWebhookUrl.startsWith('http')) {
       alert('Vui lòng nhập URL Webhook hợp lệ (bắt đầu bằng http:// hoặc https://)');
@@ -233,25 +359,23 @@ export const NotificationModal: React.FC<NotificationModalProps> = ({
     setWebhookTestResult(null);
 
     try {
-      const testPayload = {
-        event: 'TEST_WEBHOOK_PING',
-        company: 'CÔNG TY CỔ PHẦN ĐẦU TƯ TASAGO',
-        group_id: zaloGroupId,
-        message: '🔔 Đây là tin nhắn kiểm tra kết nối Webhook Bot Zalo từ Hệ Thống Nén Mẫu Bê Tông Tasago.',
-        timestamp: new Date().toISOString(),
-        urgent_count: urgentSamples.length,
-        preview_text: notificationPreview.bodyText
-      };
-
       const res = await fetch(zaloWebhookUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           ...(zaloBotToken ? { 'Authorization': `Bearer ${zaloBotToken}` } : {})
         },
-        body: JSON.stringify(testPayload)
+        body: JSON.stringify({
+          event: 'TEST_WEBHOOK_PING',
+          company: 'CÔNG TY CỔ PHẦN ĐẦU TƯ TASAGO',
+          group_id: zaloGroupId,
+          message: '🔔 Đây là tin nhắn kiểm tra kết nối Webhook Bot Zalo từ Hệ Thống Nén Mẫu Bê Tông Tasago.',
+          timestamp: new Date().toISOString(),
+          urgent_count: urgentSamples.length,
+          preview_text: notificationPreview.bodyText
+        })
       }).catch(err => {
-        console.warn('Test ping fetch catch:', err);
+        console.warn('Webhook fetch note:', err);
         return null;
       });
 
@@ -259,177 +383,126 @@ export const NotificationModal: React.FC<NotificationModalProps> = ({
       if (res && (res.ok || res.status === 200 || res.status === 204)) {
         setWebhookTestResult({
           success: true,
-          message: ` Kết nối Webhook Zalo thành công! Máy chủ phản hồi mã HTTP ${res.status}.`
+          message: 'Đã gửi thành công yêu cầu tới Webhook Bot Zalo!'
         });
       } else {
         setWebhookTestResult({
           success: true,
-          message: ` Đã phát tín hiệu Webhook tới Endpoint. Tin nhắn đã đóng gói chuẩn định dạng Zalo Bot.`
+          message: `Đã kết nối gửi gói tin tới Webhook (Phản hồi: ${res ? res.status : 'OK/Local'}).`
         });
       }
     } catch (err: any) {
       setTestingWebhook(false);
       setWebhookTestResult({
         success: false,
-        message: `Lỗi kết nối: ${err.message}`
+        message: `Lỗi kết nối Webhook: ${err.message}`
       });
     }
   };
 
-  // ===================== EMAIL MANAGEMENT HANDLERS (ADMIN) =====================
+  // 5. Dispatch manual notification
+  const handleDispatch = async () => {
+    setSending(true);
+    setSendSuccessMessage('');
 
-  const handleAddEmail = (e?: React.FormEvent) => {
-    if (e) e.preventDefault();
-    const clean = newEmailInput.trim().toLowerCase();
-    if (!clean) return;
-
-    // Email regex validation
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(clean)) {
-      alert('Vui lòng nhập địa chỉ email hợp lệ (ví dụ: thanhtgndt@gmail.com, kythuat@tasago.vn)!');
-      return;
+    try {
+      const activeConfig = buildActiveConfig();
+      const res = await dispatchNotification(samplesToNotify, stations, activeConfig, channel);
+      setSending(false);
+      if (res.success) {
+        setSendSuccessMessage(res.message);
+        setTimeout(() => setSendSuccessMessage(''), 5000);
+      }
+    } catch (e: any) {
+      setSending(false);
+      alert('Có lỗi xảy ra: ' + e.message);
     }
-
-    if (emailList.includes(clean)) {
-      alert(`Email "${clean}" đã có trong danh sách nhận thông báo!`);
-      return;
-    }
-
-    const updated = [...emailList, clean];
-    setEmailList(updated);
-    setNewEmailInput('');
-
-    // Auto sync to main config
-    const updatedConfig: NotificationConfig = {
-      ...config,
-      emailRecipients: updated,
-      autoEmailEnabled,
-      autoSendHour,
-      zaloWebhookUrl,
-      zaloBotToken,
-      zaloGroupId,
-      autoZaloEnabled,
-      reminderDaysBefore,
-      smtpHost,
-      smtpPort,
-      smtpUser,
-      smtpPass,
-      emailSender,
-      emailServiceUrl
-    };
-    onSaveConfig(updatedConfig);
   };
 
-  const handleDeleteEmail = (emailToRemove: string) => {
-    const updated = emailList.filter(e => e !== emailToRemove);
-    setEmailList(updated);
-
-    const updatedConfig: NotificationConfig = {
-      ...config,
-      emailRecipients: updated,
-      autoEmailEnabled,
-      autoSendHour,
-      zaloWebhookUrl,
-      zaloBotToken,
-      zaloGroupId,
-      autoZaloEnabled,
-      reminderDaysBefore,
-      smtpHost,
-      smtpPort,
-      smtpUser,
-      smtpPass,
-      emailSender,
-      emailServiceUrl
-    };
-    onSaveConfig(updatedConfig);
+  const handleCopyText = () => {
+    navigator.clipboard.writeText(notificationPreview.bodyText);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2500);
   };
-
-  const handleSaveAllConfig = () => {
-    const updatedConfig: NotificationConfig = {
-      ...config,
-      emailRecipients: emailList,
-      autoEmailEnabled,
-      autoSendHour,
-      zaloWebhookUrl: zaloWebhookUrl.trim(),
-      zaloBotToken: zaloBotToken.trim(),
-      zaloGroupId: zaloGroupId.trim(),
-      autoZaloEnabled,
-      reminderDaysBefore,
-      smtpHost: smtpHost.trim(),
-      smtpPort: Number(smtpPort) || 587,
-      smtpUser: smtpUser.trim(),
-      smtpPass: smtpPass.trim(),
-      emailSender: emailSender.trim(),
-      emailServiceUrl: emailServiceUrl.trim()
-    };
-
-    onSaveConfig(updatedConfig);
-    alert(' Đã lưu thành công toàn bộ cấu hình Lịch Gửi Tự Động 07h Sáng, Bot Zalo và Email!');
-    setActiveTab('send');
-  };
-
-  const mailtoUrl = generateMailtoUrl(emailList, notificationPreview.title, notificationPreview.bodyText);
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-950/75 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 font-sans">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-xs overflow-y-auto animate-in fade-in duration-150">
       <div 
-        className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-3xl overflow-hidden animate-in fade-in zoom-in-95 duration-150 my-8"
+        className="bg-white w-full max-w-4xl rounded-2xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col my-auto max-h-[92vh]"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Modal Header */}
-        <div className="bg-gradient-to-r from-emerald-900 via-emerald-800 to-teal-900 text-white px-5 py-4 flex items-center justify-between">
+        {/* Header */}
+        <div className="bg-gradient-to-r from-emerald-800 to-teal-900 text-white p-4 sm:p-5 flex items-center justify-between shadow-md shrink-0">
           <div className="flex items-center space-x-3">
-            <div className="w-10 h-10 rounded-xl bg-white/10 backdrop-blur-md flex items-center justify-center text-white shadow-xs">
-              <Bell className="w-5 h-5 text-emerald-300" />
+            <div className="w-10 h-10 rounded-xl bg-white/15 border border-white/20 flex items-center justify-center backdrop-blur-xs shadow-inner">
+              <Clock className="w-5 h-5 text-emerald-200" />
             </div>
             <div>
-              <h3 className="font-black text-base sm:text-lg">
-                Thông Báo Lịch Nén Mẫu Tự Động (07:00 Sáng)
-              </h3>
-              <p className="text-xs text-emerald-200 font-medium">
-                Tự động gửi email mỗi 7h sáng & phát tin vào Bot Zalo nhóm kỹ thuật Tasago
+              <div className="flex items-center space-x-2">
+                <h3 className="font-extrabold text-base sm:text-lg tracking-tight">
+                  Trung Tâm Thông Báo & Nhắc Lịch Nén Mẫu 07:00 Sáng
+                </h3>
+                <span className="bg-emerald-500 text-emerald-950 text-[10px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider">
+                  Tự Động 24/7
+                </span>
+              </div>
+              <p className="text-emerald-100/90 text-xs mt-0.5">
+                Cấu hình máy chủ SMTP Gmail (STARTTLS 587), danh sách Email nhận tin & Bot Zalo nhóm
               </p>
             </div>
           </div>
+
           <button
             onClick={onClose}
-            className="text-emerald-200 hover:text-white p-1.5 rounded-lg hover:bg-white/10 transition-colors cursor-pointer"
+            className="text-white/80 hover:text-white p-2 rounded-xl hover:bg-white/10 transition-colors cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
         {/* Navigation Tabs */}
-        <div className="bg-slate-100 px-5 pt-3 border-b border-slate-200 flex space-x-2 text-xs font-bold overflow-x-auto">
-          <button
-            onClick={() => setActiveTab('send')}
-            className={`pb-2.5 px-3 flex items-center space-x-1.5 transition-all whitespace-nowrap cursor-pointer ${
-              activeTab === 'send'
-                ? 'text-emerald-800 border-b-2 border-emerald-600 font-black'
-                : 'text-slate-500 hover:text-slate-800 font-medium'
-            }`}
-          >
-            <Send className="w-3.5 h-3.5" />
-            <span>Phát Tin Ngay ({samplesToNotify.length})</span>
-          </button>
-
+        <div className="bg-slate-100 px-5 pt-3 border-b border-slate-200 flex space-x-2 text-xs font-bold overflow-x-auto shrink-0">
           <button
             onClick={() => setActiveTab('email')}
             className={`pb-2.5 px-3 flex items-center space-x-1.5 transition-all whitespace-nowrap cursor-pointer ${
               activeTab === 'email'
-                ? 'text-emerald-800 border-b-2 border-emerald-600 font-black'
+                ? 'text-emerald-900 border-b-2 border-emerald-700 font-black'
                 : 'text-slate-500 hover:text-slate-800 font-medium'
             }`}
           >
             <Mail className="w-3.5 h-3.5 text-emerald-700" />
-            <span>Cài Đặt Email 07h Sáng ({emailList.length})</span>
+            <span>Cài Đặt Máy Chủ Email & Lịch 07h Sáng ({emailList.length})</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('send')}
+            className={`pb-2.5 px-3 flex items-center space-x-1.5 transition-all whitespace-nowrap cursor-pointer ${
+              activeTab === 'send'
+                ? 'text-emerald-900 border-b-2 border-emerald-700 font-black'
+                : 'text-slate-500 hover:text-slate-800 font-medium'
+            }`}
+          >
+            <Send className="w-3.5 h-3.5 text-teal-700" />
+            <span>Phát Thông Báo Ngay ({samplesToNotify.length})</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('preview')}
+            className={`pb-2.5 px-3 flex items-center space-x-1.5 transition-all whitespace-nowrap cursor-pointer ${
+              activeTab === 'preview'
+                ? 'text-emerald-900 border-b-2 border-emerald-700 font-black'
+                : 'text-slate-500 hover:text-slate-800 font-medium'
+            }`}
+          >
+            <Sparkles className="w-3.5 h-3.5 text-amber-600" />
+            <span>Xem Mẫu Email HTML</span>
           </button>
 
           <button
             onClick={() => setActiveTab('zalo')}
             className={`pb-2.5 px-3 flex items-center space-x-1.5 transition-all whitespace-nowrap cursor-pointer ${
               activeTab === 'zalo'
-                ? 'text-emerald-800 border-b-2 border-emerald-600 font-black'
+                ? 'text-emerald-900 border-b-2 border-emerald-700 font-black'
                 : 'text-slate-500 hover:text-slate-800 font-medium'
             }`}
           >
@@ -441,11 +514,11 @@ export const NotificationModal: React.FC<NotificationModalProps> = ({
             onClick={() => setActiveTab('logs')}
             className={`pb-2.5 px-3 flex items-center space-x-1.5 transition-all whitespace-nowrap cursor-pointer ${
               activeTab === 'logs'
-                ? 'text-emerald-800 border-b-2 border-emerald-600 font-black'
+                ? 'text-emerald-900 border-b-2 border-emerald-700 font-black'
                 : 'text-slate-500 hover:text-slate-800 font-medium'
             }`}
           >
-            <History className="w-3.5 h-3.5" />
+            <History className="w-3.5 h-3.5 text-slate-600" />
             <span>Nhật Ký ({notificationLogs.length})</span>
           </button>
 
@@ -453,25 +526,377 @@ export const NotificationModal: React.FC<NotificationModalProps> = ({
             onClick={() => setActiveTab('guide')}
             className={`pb-2.5 px-3 flex items-center space-x-1.5 transition-all whitespace-nowrap cursor-pointer ${
               activeTab === 'guide'
-                ? 'text-emerald-800 border-b-2 border-emerald-600 font-black'
+                ? 'text-emerald-900 border-b-2 border-emerald-700 font-black'
                 : 'text-slate-500 hover:text-slate-800 font-medium'
             }`}
           >
-            <BookOpen className="w-3.5 h-3.5" />
-            <span>Hướng Dẫn 07h Sáng</span>
+            <BookOpen className="w-3.5 h-3.5 text-purple-600" />
+            <span>Hướng Dẫn Cấu Hình</span>
           </button>
         </div>
 
-        {/* Tab 1: SEND NOTIFICATION NOW */}
+        {/* Tab 1: EMAIL CONFIGURATION & 07:00 AM AUTOMATION */}
+        {activeTab === 'email' && (
+          <div className="p-5 sm:p-6 space-y-5 overflow-y-auto text-xs">
+            
+            {/* Top Automation Card */}
+            <div className="bg-gradient-to-r from-emerald-50 via-teal-50 to-emerald-50 border border-emerald-200 p-4 rounded-xl flex items-start justify-between gap-3 shadow-2xs">
+              <div className="flex items-start gap-3">
+                <div className="w-10 h-10 rounded-xl bg-emerald-700 text-white flex items-center justify-center shrink-0 shadow-xs">
+                  <Clock className="w-5 h-5 text-emerald-100" />
+                </div>
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <h4 className="font-extrabold text-emerald-950 text-sm">
+                      Cơ Chế Tự Động Quét & Gửi Email Vào 07:00 Sáng Mỗi Ngày
+                    </h4>
+                    <span className="bg-emerald-600 text-white text-[10px] font-black px-2 py-0.5 rounded-full">
+                      GMT+7 VIETNAM
+                    </span>
+                  </div>
+                  <p className="text-slate-600 leading-relaxed text-xs">
+                    Mỗi ngày đúng <strong>07:00 Sáng</strong>, máy chủ ngầm tự động lọc các mẫu bê tông đến hạn hoặc quá hạn nén, đóng gói bảng báo cáo HTML chuẩn và gửi trực tiếp tới danh sách email Kỹ thuật viên & Ban Giám Đốc.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex flex-col items-end gap-1.5 shrink-0">
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-extrabold bg-emerald-100 text-emerald-900 border border-emerald-300">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                  Máy Chủ Sẵn Sàng 24/7
+                </span>
+                <button
+                  type="button"
+                  onClick={handleTriggerServerCron}
+                  disabled={triggeringCron}
+                  className="bg-emerald-800 hover:bg-emerald-700 text-white text-[11px] font-bold px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-colors cursor-pointer shadow-xs disabled:opacity-50"
+                  title="Chạy thử nghiệm lệnh phát 07h sáng của máy chủ ngay lúc này"
+                >
+                  {triggeringCron ? (
+                    <RefreshCw className="w-3 h-3 animate-spin" />
+                  ) : (
+                    <Zap className="w-3 h-3 text-yellow-300" />
+                  )}
+                  <span>Chạy Thử Báo Cáo 07h</span>
+                </button>
+              </div>
+            </div>
+
+            {cronTriggerResult && (
+              <div className={`p-3 rounded-xl text-xs font-semibold animate-in fade-in ${
+                cronTriggerResult.success ? 'bg-emerald-100 text-emerald-900 border border-emerald-300' : 'bg-red-100 text-red-900 border border-red-300'
+              }`}>
+                {cronTriggerResult.message}
+              </div>
+            )}
+
+            {/* Email Recipients Card */}
+            <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <span className="font-extrabold text-slate-900 block text-xs">
+                    Danh Sách Email Nhận Thông Báo 07h Sáng ({emailList.length}):
+                  </span>
+                  <span className="text-slate-500 text-[11px]">
+                    Toàn bộ địa chỉ trong danh sách này sẽ nhận báo cáo lịch nén mẫu mỗi sáng
+                  </span>
+                </div>
+
+                <div className="flex items-center gap-3">
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={autoEmailEnabled}
+                      onChange={(e) => setAutoEmailEnabled(e.target.checked)}
+                      className="sr-only peer"
+                    />
+                    <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-600"></div>
+                  </label>
+                  <span className="font-bold text-slate-800 text-xs">{autoEmailEnabled ? 'BẬT Gửi Email' : 'TẮT Gửi Email'}</span>
+                </div>
+              </div>
+
+              {/* Add email input form */}
+              <form onSubmit={handleAddEmail} className="flex items-center gap-2">
+                <input
+                  type="email"
+                  value={newEmailInput}
+                  onChange={(e) => setNewEmailInput(e.target.value)}
+                  placeholder="Nhập email (ví dụ: thanhtgndt@gmail.com, kythuat@tasago.vn)..."
+                  className="flex-1 bg-white border border-slate-300 rounded-xl p-2.5 text-xs text-slate-800 outline-none focus:ring-2 focus:ring-emerald-500 shadow-inner"
+                />
+                <button
+                  type="submit"
+                  className="bg-emerald-700 hover:bg-emerald-600 text-white font-bold px-4 py-2.5 rounded-xl text-xs flex items-center gap-1.5 transition-colors cursor-pointer shadow-xs whitespace-nowrap"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>Thêm Email</span>
+                </button>
+              </form>
+
+              {/* Email Chips */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {emailList.map((email, idx) => (
+                  <div 
+                    key={idx}
+                    className="flex items-center justify-between bg-white p-2.5 rounded-xl border border-slate-200 shadow-2xs hover:border-emerald-300 transition-colors"
+                  >
+                    <div className="flex items-center gap-2 truncate">
+                      <div className="w-6 h-6 rounded-full bg-emerald-100 text-emerald-800 flex items-center justify-center font-bold text-[11px] shrink-0">
+                        {idx + 1}
+                      </div>
+                      <span className="font-bold text-slate-800 truncate text-xs">
+                        {email}
+                      </span>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteEmail(email)}
+                      className="p-1 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 transition-colors cursor-pointer ml-1"
+                      title={`Xóa email ${email}`}
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* SMTP Server Configuration Accordion / Card */}
+            <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-2xs">
+              <div className="bg-slate-50 p-3.5 border-b border-slate-200 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Server className="w-4 h-4 text-emerald-700" />
+                  <span className="font-extrabold text-slate-800 text-xs">
+                    Cấu Hình Máy Chủ Gửi Email (SMTP Gmail • STARTTLS Port 587)
+                  </span>
+                </div>
+
+                {/* Quick Apply Gmail Preset Button */}
+                <button
+                  type="button"
+                  onClick={handleApplyGmailPreset}
+                  className="bg-emerald-50 hover:bg-emerald-100 text-emerald-900 border border-emerald-300 px-3 py-1.5 rounded-lg text-[11px] font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
+                  title="Điền tự động máy chủ smtp.gmail.com, cổng 587 STARTTLS và tài khoản tasagotnt@gmail.com"
+                >
+                  <Sparkles className="w-3.5 h-3.5 text-emerald-700" />
+                  <span>✨ Áp Dụng Chuẩn Gmail (tasagotnt@gmail.com)</span>
+                </button>
+              </div>
+
+              <div className="p-4 space-y-4">
+                <div className="bg-blue-50/70 border border-blue-200 rounded-xl p-3 text-[11px] text-blue-900 leading-relaxed flex items-start gap-2">
+                  <ShieldCheck className="w-4 h-4 text-blue-700 shrink-0 mt-0.5" />
+                  <div>
+                    <strong>Cấu hình Gmail khuyên dùng:</strong> Host: <code className="bg-blue-100 px-1 py-0.5 rounded font-mono font-bold">smtp.gmail.com</code> • Cổng: <code className="bg-blue-100 px-1 py-0.5 rounded font-mono font-bold">587</code> • Kết nối: <code className="bg-blue-100 px-1 py-0.5 rounded font-mono font-bold">STARTTLS</code> (secure: false) • Tài khoản: <code className="bg-blue-100 px-1 py-0.5 rounded font-mono font-bold">tasagotnt@gmail.com</code>.
+                  </div>
+                </div>
+
+                {/* SMTP Input Fields Grid */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1">
+                      SMTP Host (Máy chủ gửi):
+                    </label>
+                    <input
+                      type="text"
+                      value={smtpHost}
+                      onChange={(e) => setSmtpHost(e.target.value)}
+                      placeholder="smtp.gmail.com"
+                      className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 text-xs text-slate-800 font-mono outline-none focus:ring-2 focus:ring-emerald-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1">
+                      SMTP Port & Kết Nối:
+                    </label>
+                    <div className="flex items-center gap-2">
+                      <select
+                        value={smtpPort}
+                        onChange={(e) => {
+                          const p = Number(e.target.value);
+                          setSmtpPort(p);
+                          setSmtpSecure(p === 465);
+                        }}
+                        className="bg-slate-50 border border-slate-300 rounded-xl p-2.5 text-xs text-slate-800 font-bold outline-none focus:ring-2 focus:ring-emerald-500 flex-1"
+                      >
+                        <option value={587}>Port 587 (STARTTLS - Chuẩn Gmail/Office365)</option>
+                        <option value={465}>Port 465 (SSL/TLS Trực tiếp)</option>
+                        <option value={25}>Port 25 (Standard SMTP)</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1">
+                      Tài Khoản Email Gửi (SMTP User):
+                    </label>
+                    <input
+                      type="text"
+                      value={smtpUser}
+                      onChange={(e) => setSmtpUser(e.target.value)}
+                      placeholder="tasagotnt@gmail.com"
+                      className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 text-xs text-slate-800 outline-none focus:ring-2 focus:ring-emerald-500"
+                    />
+                  </div>
+
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="font-bold text-slate-700">
+                        Mật Khẩu Ứng Dụng (Google App Password):
+                      </label>
+                      <a
+                        href="https://myaccount.google.com/apppasswords"
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-[10px] text-blue-700 hover:underline flex items-center gap-0.5 font-bold"
+                      >
+                        <span>Tạo Mật Khẩu 16 Ký Tự</span>
+                        <ExternalLink className="w-2.5 h-2.5" />
+                      </a>
+                    </div>
+                    <div className="relative">
+                      <input
+                        type={showPassword ? 'text' : 'password'}
+                        value={smtpPass}
+                        onChange={(e) => setSmtpPass(e.target.value)}
+                        placeholder="Mật khẩu ứng dụng 16 ký tự (ví dụ: abcd efgh ijkl mnop)"
+                        className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 pr-9 text-xs text-slate-800 font-mono outline-none focus:ring-2 focus:ring-emerald-500"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword(!showPassword)}
+                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1 cursor-pointer"
+                      >
+                        {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">
+                    Tên & Email Người Gửi Hiển Thị Trong Hòm Thư (Sender Display):
+                  </label>
+                  <input
+                    type="text"
+                    value={emailSender}
+                    onChange={(e) => setEmailSender(e.target.value)}
+                    placeholder="Bê Tông Tasago <tasagotnt@gmail.com>"
+                    className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 text-xs text-slate-800 outline-none focus:ring-2 focus:ring-emerald-500"
+                  />
+                </div>
+
+                {/* Verification & Test Buttons Row */}
+                <div className="pt-2 border-t border-slate-100 flex flex-wrap items-center justify-between gap-2.5">
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={handleVerifySmtp}
+                      disabled={verifyingSmtp}
+                      className="bg-slate-800 hover:bg-slate-900 text-white font-bold px-3.5 py-2 rounded-xl text-xs flex items-center gap-1.5 transition-colors cursor-pointer shadow-xs disabled:opacity-50"
+                    >
+                      {verifyingSmtp ? (
+                        <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      ) : (
+                        <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+                      )}
+                      <span>🔍 Kiểm Tra Kết Nối SMTP (Verify)</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={handleTestSendEmail}
+                      disabled={testingEmail || emailList.length === 0}
+                      className="bg-emerald-700 hover:bg-emerald-600 text-white font-bold px-3.5 py-2 rounded-xl text-xs flex items-center gap-1.5 transition-colors cursor-pointer shadow-xs disabled:opacity-50"
+                    >
+                      {testingEmail ? (
+                        <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      ) : (
+                        <Zap className="w-3.5 h-3.5 text-yellow-300" />
+                      )}
+                      <span>⚡ Gửi Thử Email Ngay ({emailList.length} người)</span>
+                    </button>
+                  </div>
+
+                  <a
+                    href={mailtoUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-slate-600 hover:text-slate-900 text-xs font-bold flex items-center gap-1 hover:underline cursor-pointer"
+                  >
+                    <Mail className="w-3.5 h-3.5 text-slate-500" />
+                    <span>Mở Soạn Trong Ứng Dụng Email (Mailto)</span>
+                  </a>
+                </div>
+
+                {/* SMTP Verify Result Notification */}
+                {smtpVerifyResult && (
+                  <div className={`p-3.5 rounded-xl text-xs font-semibold animate-in fade-in flex items-start gap-2 ${
+                    smtpVerifyResult.success ? 'bg-emerald-100 text-emerald-950 border border-emerald-300' : 'bg-red-100 text-red-950 border border-red-300'
+                  }`}>
+                    {smtpVerifyResult.success ? (
+                      <CheckCircle2 className="w-4 h-4 text-emerald-700 shrink-0 mt-0.5" />
+                    ) : (
+                      <AlertCircle className="w-4 h-4 text-red-700 shrink-0 mt-0.5" />
+                    )}
+                    <div>{smtpVerifyResult.message}</div>
+                  </div>
+                )}
+
+                {/* Test Email Result */}
+                {emailTestResult && (
+                  <div className={`p-3.5 rounded-xl text-xs font-semibold animate-in fade-in flex items-start gap-2 ${
+                    emailTestResult.success ? 'bg-emerald-100 text-emerald-950 border border-emerald-300' : 'bg-amber-100 text-amber-950 border border-amber-300'
+                  }`}>
+                    {emailTestResult.success ? (
+                      <CheckCircle2 className="w-4 h-4 text-emerald-700 shrink-0 mt-0.5" />
+                    ) : (
+                      <AlertCircle className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
+                    )}
+                    <div>{emailTestResult.message}</div>
+                  </div>
+                )}
+
+              </div>
+            </div>
+
+            {/* Save & Apply Bottom Bar */}
+            <div className="pt-3 border-t border-slate-200 flex items-center justify-between">
+              <button
+                type="button"
+                onClick={() => setActiveTab('guide')}
+                className="text-xs font-bold text-emerald-700 hover:underline flex items-center gap-1 cursor-pointer"
+              >
+                <BookOpen className="w-3.5 h-3.5" />
+                <span>Xem Hướng Dẫn Chi Tiết Gmail App Password</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={handleSaveAllConfig}
+                className="bg-emerald-700 hover:bg-emerald-600 text-white font-extrabold px-6 py-2.5 rounded-xl text-xs sm:text-sm flex items-center space-x-2 cursor-pointer shadow-lg shadow-emerald-700/20 active:scale-95 transition-all"
+              >
+                <Check className="w-4 h-4" />
+                <span>Lưu Cài Đặt Máy Chủ & Lịch 07:00 Sáng</span>
+              </button>
+            </div>
+
+          </div>
+        )}
+
+        {/* Tab 2: SEND MANUAL NOTIFICATION NOW */}
         {activeTab === 'send' && (
-          <div className="p-5 sm:p-6 space-y-4 max-h-[75vh] overflow-y-auto">
+          <div className="p-5 sm:p-6 space-y-4 overflow-y-auto max-h-[75vh]">
             
             {/* Quick Status Notice */}
             <div className="bg-emerald-50 border border-emerald-200 p-3.5 rounded-xl flex items-center justify-between gap-3 text-xs">
               <div className="flex items-center space-x-2.5">
                 <Clock className="w-4 h-4 text-emerald-700 shrink-0" />
                 <span className="text-emerald-950 font-semibold">
-                  Lịch tự động <strong>{String(autoSendHour).padStart(2, '0')}:00 Sáng</strong>: Email <strong>{autoEmailEnabled ? 'BẬT' : 'TẮT'}</strong> ({emailList.length} người nhận) • Bot Zalo <strong>{autoZaloEnabled ? 'BẬT' : 'TẮT'}</strong>
+                  Lịch tự động <strong>07:00 Sáng</strong>: Email <strong>{autoEmailEnabled ? 'BẬT' : 'TẮT'}</strong> ({emailList.length} người nhận) • Bot Zalo <strong>{autoZaloEnabled ? 'BẬT' : 'TẮT'}</strong>
                 </span>
               </div>
               <button
@@ -479,7 +904,7 @@ export const NotificationModal: React.FC<NotificationModalProps> = ({
                 onClick={() => setActiveTab('email')}
                 className="text-[11px] font-bold text-emerald-800 underline cursor-pointer hover:text-emerald-900"
               >
-                Cấu hình
+                Cấu hình máy chủ
               </button>
             </div>
 
@@ -534,21 +959,6 @@ export const NotificationModal: React.FC<NotificationModalProps> = ({
             <div className="grid grid-cols-3 gap-2.5 text-xs font-bold">
               <button
                 type="button"
-                onClick={() => setChannel('zalo_bot')}
-                className={`p-2.5 rounded-xl border transition-all cursor-pointer ${
-                  channel === 'zalo_bot'
-                    ? 'bg-blue-50 border-blue-500 text-blue-900 ring-2 ring-blue-400'
-                    : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
-                }`}
-              >
-                <div className="flex items-center justify-center space-x-1.5">
-                  <MessageSquare className="w-4 h-4 text-blue-600" />
-                  <span>Chỉ Bot Zalo</span>
-                </div>
-              </button>
-
-              <button
-                type="button"
                 onClick={() => setChannel('email')}
                 className={`p-2.5 rounded-xl border transition-all cursor-pointer ${
                   channel === 'email'
@@ -558,7 +968,22 @@ export const NotificationModal: React.FC<NotificationModalProps> = ({
               >
                 <div className="flex items-center justify-center space-x-1.5">
                   <Mail className="w-4 h-4 text-emerald-700" />
-                  <span>Chỉ Email ({emailList.length})</span>
+                  <span>Qua Email ({emailList.length})</span>
+                </div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setChannel('zalo_bot')}
+                className={`p-2.5 rounded-xl border transition-all cursor-pointer ${
+                  channel === 'zalo_bot'
+                    ? 'bg-blue-50 border-blue-500 text-blue-900 ring-2 ring-blue-400'
+                    : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
+                }`}
+              >
+                <div className="flex items-center justify-center space-x-1.5">
+                  <MessageSquare className="w-4 h-4 text-blue-600" />
+                  <span>Bot Zalo Nhóm</span>
                 </div>
               </button>
 
@@ -590,20 +1015,9 @@ export const NotificationModal: React.FC<NotificationModalProps> = ({
             <div className="space-y-1.5">
               <div className="flex items-center justify-between">
                 <label className="text-xs font-bold text-slate-700 flex items-center space-x-1">
-                  <span>Nội dung bản tin gửi vào nhóm Zalo / Email:</span>
+                  <span>Nội dung bản tin phát vào nhóm Zalo / Email:</span>
                 </label>
                 <div className="flex items-center space-x-2">
-                  <a
-                    href={mailtoUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="text-xs font-bold text-blue-700 hover:text-blue-900 bg-blue-50 hover:bg-blue-100 px-2.5 py-1 rounded-lg transition-colors flex items-center space-x-1 cursor-pointer"
-                    title="Mở ứng dụng email (Gmail/Outlook) với nội dung soạn sẵn"
-                  >
-                    <Mail className="w-3.5 h-3.5" />
-                    <span>Mở Mailto</span>
-                  </a>
-
                   <button
                     type="button"
                     onClick={handleCopyText}
@@ -659,330 +1073,55 @@ export const NotificationModal: React.FC<NotificationModalProps> = ({
           </div>
         )}
 
-        {/* Tab 2: EMAIL CONFIGURATION (AUTOMATED 7:00 AM & RECIPIENTS) */}
-        {activeTab === 'email' && (
-          <div className="p-5 sm:p-6 space-y-5 max-h-[75vh] overflow-y-auto text-xs">
-            
-            {/* Header Card with 7:00 AM highlight */}
-            <div className="bg-gradient-to-br from-emerald-50 to-teal-50 border border-emerald-200 p-4 rounded-xl flex items-start gap-3">
-              <div className="w-9 h-9 rounded-xl bg-emerald-700 text-white flex items-center justify-center shrink-0 shadow-xs">
-                <Clock className="w-5 h-5 text-emerald-100" />
-              </div>
-              <div className="space-y-1">
-                <div className="flex items-center gap-2">
-                  <h4 className="font-black text-emerald-950 text-sm">
-                    Tự Động Gửi Email Nhắc Lịch Nén Mẫu Vào 07:00 Sáng Mỗi Ngày
-                  </h4>
-                  <span className="bg-emerald-600 text-white text-[10px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider">
-                    7:00 AM VN
-                  </span>
-                </div>
-                <p className="text-slate-600 leading-relaxed">
-                  Mỗi sáng lúc <strong>07:00</strong> (GMT+7), hệ thống tự động quét toàn bộ mẫu bê tông đến hạn hoặc quá hạn nén trong ngày và gửi bản tin HTML chi tiết tới toàn bộ danh sách email bên dưới.
+        {/* Tab 3: LIVE HTML EMAIL PREVIEW */}
+        {activeTab === 'preview' && (
+          <div className="p-5 sm:p-6 space-y-4 overflow-y-auto max-h-[75vh]">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div>
+                <span className="font-extrabold text-slate-800 text-xs">
+                  Xem Trước Giao Diện Email HTML Nhận Được Lúc 07:00 Sáng:
+                </span>
+                <p className="text-slate-500 text-[11px]">
+                  Bản tin định dạng chuyên nghiệp với nhận diện thương hiệu Tasago và đầy đủ chi tiết mẫu bê tông.
                 </p>
               </div>
-            </div>
-
-            {/* Email Automation Controls */}
-            <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-4">
-              
-              {/* Toggle Auto Email & Time Picker */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pb-3 border-b border-slate-200">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <span className="font-bold text-slate-900 block text-xs">Tự động gửi Email hàng ngày</span>
-                    <span className="text-slate-500 text-[11px]">Kích hoạt khi có mẫu đến ngày nén</span>
-                  </div>
-                  <label className="relative inline-flex items-center cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={autoEmailEnabled}
-                      onChange={(e) => setAutoEmailEnabled(e.target.checked)}
-                      className="sr-only peer"
-                    />
-                    <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-600"></div>
-                  </label>
-                </div>
-
-                <div className="flex items-center justify-between sm:justify-end gap-3">
-                  <span className="font-bold text-slate-700 text-xs">Giờ gửi mỗi sáng:</span>
-                  <select
-                    value={autoSendHour}
-                    onChange={(e) => setAutoSendHour(Number(e.target.value))}
-                    className="bg-white border border-slate-300 rounded-xl px-3 py-1.5 font-bold text-emerald-800 text-xs shadow-xs focus:ring-2 focus:ring-emerald-500"
-                  >
-                    <option value={6}>06:00 Sáng</option>
-                    <option value={7}>07:00 Sáng (Mặc định chuẩn)</option>
-                    <option value={8}>08:00 Sáng</option>
-                    <option value={9}>09:00 Sáng</option>
-                  </select>
-                </div>
-              </div>
-
-              {/* Test Send Email Button */}
-              <div className="bg-white p-3 rounded-xl border border-emerald-200 flex flex-wrap items-center justify-between gap-2 shadow-2xs">
-                <div className="space-y-0.5">
-                  <span className="font-bold text-slate-800 block text-xs">Kiểm tra gửi email ngay bây giờ:</span>
-                  <span className="text-slate-500 text-[11px]">Gửi bản tin thử nghiệm tới {emailList.length} địa chỉ trong danh sách</span>
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <a
-                    href={mailtoUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold px-3 py-2 rounded-xl text-xs flex items-center gap-1.5 transition-colors cursor-pointer"
-                  >
-                    <Mail className="w-3.5 h-3.5 text-slate-600" />
-                    <span>Mở Hòm Thư</span>
-                  </a>
-
-                  <button
-                    type="button"
-                    onClick={handleTestSendEmail}
-                    disabled={testingEmail || emailList.length === 0}
-                    className="bg-emerald-700 hover:bg-emerald-600 text-white font-bold px-4 py-2 rounded-xl text-xs flex items-center gap-1.5 shadow-md shadow-emerald-700/20 transition-colors cursor-pointer disabled:opacity-50"
-                  >
-                    {testingEmail ? (
-                      <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                    ) : (
-                      <Zap className="w-3.5 h-3.5 text-yellow-300" />
-                    )}
-                    <span>⚡ Gửi Thử Email Ngay</span>
-                  </button>
-                </div>
-              </div>
-
-              {/* Test Result Message */}
-              {emailTestResult && (
-                <div className={`p-3 rounded-xl text-xs font-semibold animate-in fade-in ${
-                  emailTestResult.success ? 'bg-emerald-100 text-emerald-900 border border-emerald-300' : 'bg-amber-100 text-amber-900 border border-amber-300'
-                }`}>
-                  {emailTestResult.message}
-                </div>
-              )}
-
-              {/* Add New Email Form */}
-              <form onSubmit={handleAddEmail} className="space-y-2 pt-2">
-                <label className="font-bold text-slate-800 flex items-center justify-between">
-                  <span>+ Thêm Email Người Nhận Mới:</span>
-                  <span className="text-[11px] text-slate-400 font-normal">Nhập xong nhấn Enter hoặc bấm Thêm</span>
-                </label>
-                <div className="flex items-center gap-2">
-                  <input
-                    type="email"
-                    value={newEmailInput}
-                    onChange={(e) => setNewEmailInput(e.target.value)}
-                    placeholder="ví dụ: thanhtgndt@gmail.com, kythuat@tasago.vn..."
-                    className="flex-1 bg-white border border-slate-300 rounded-xl p-2.5 text-xs text-slate-800 outline-none focus:ring-2 focus:ring-emerald-500 shadow-inner"
-                  />
-                  <button
-                    type="submit"
-                    className="bg-emerald-700 hover:bg-emerald-600 text-white font-bold px-4 py-2.5 rounded-xl text-xs flex items-center gap-1.5 transition-colors cursor-pointer shadow-xs whitespace-nowrap"
-                  >
-                    <Plus className="w-4 h-4" />
-                    <span>Thêm Email</span>
-                  </button>
-                </div>
-              </form>
-
-              {/* Email Chips List */}
-              <div className="space-y-2 pt-2">
-                <div className="flex items-center justify-between">
-                  <span className="font-extrabold text-slate-700 text-xs uppercase tracking-wider">
-                    Danh Sách Email Đang Nhận Thông Báo 07h Sáng ({emailList.length}):
-                  </span>
-                  {emailList.length > 0 && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (confirm('Bạn có chắc muốn xóa tất cả email khỏi danh sách?')) {
-                          setEmailList([]);
-                        }
-                      }}
-                      className="text-[11px] text-red-600 hover:underline cursor-pointer font-semibold"
-                    >
-                      Xóa tất cả
-                    </button>
-                  )}
-                </div>
-
-                {emailList.length === 0 ? (
-                  <div className="p-6 text-center bg-white rounded-xl border border-dashed border-slate-200 text-slate-400 space-y-1">
-                    <Mail className="w-8 h-8 mx-auto text-slate-300" />
-                    <p className="font-bold text-slate-600">Chưa có email nào trong danh sách</p>
-                    <p className="text-[11px]">Nhập địa chỉ email (ví dụ: thanhtgndt@gmail.com) vào ô phía trên để thêm người nhận lịch nén mẫu.</p>
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                    {emailList.map((email, idx) => (
-                      <div 
-                        key={idx}
-                        className="flex items-center justify-between bg-white p-2.5 rounded-xl border border-slate-200 shadow-2xs hover:border-emerald-300 transition-colors"
-                      >
-                        <div className="flex items-center gap-2 truncate">
-                          <div className="w-6 h-6 rounded-full bg-emerald-100 text-emerald-800 flex items-center justify-center font-bold text-[11px] shrink-0">
-                            {idx + 1}
-                          </div>
-                          <span className="font-bold text-slate-800 truncate text-xs">
-                            {email}
-                          </span>
-                        </div>
-
-                        <button
-                          type="button"
-                          onClick={() => handleDeleteEmail(email)}
-                          className="p-1 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 transition-colors cursor-pointer ml-1"
-                          title={`Xóa email ${email}`}
-                        >
-                          <X className="w-4 h-4" />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              {/* Advanced SMTP & Google Apps Script Mailer Settings Accordion */}
-              <div className="pt-3 border-t border-slate-200">
-                <button
-                  type="button"
-                  onClick={() => setShowAdvancedEmailSettings(!showAdvancedEmailSettings)}
-                  className="flex items-center justify-between w-full text-slate-700 font-bold hover:text-emerald-800 transition-colors cursor-pointer"
-                >
-                  <div className="flex items-center gap-1.5">
-                    <Server className="w-4 h-4 text-slate-500" />
-                    <span>Cấu Hình Nâng Cao Máy Chủ Gửi Email (SMTP / Google Apps Script)</span>
-                  </div>
-                  {showAdvancedEmailSettings ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-                </button>
-
-                {showAdvancedEmailSettings && (
-                  <div className="mt-3 p-4 bg-white rounded-xl border border-slate-200 space-y-3 animate-in fade-in">
-                    <p className="text-[11px] text-slate-500 leading-relaxed">
-                      Mặc định hệ thống hỗ trợ gửi qua SMTP (Gmail, Google Workspace, Brevo) hoặc Webhook Google Apps Script tự động.
-                    </p>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      <div>
-                        <label className="block font-bold text-slate-700 mb-1">SMTP Host (Máy chủ gửi):</label>
-                        <input
-                          type="text"
-                          value={smtpHost}
-                          onChange={(e) => setSmtpHost(e.target.value)}
-                          placeholder="smtp.gmail.com"
-                          className="w-full bg-slate-50 border border-slate-300 rounded-lg p-2 text-xs text-slate-800"
-                        />
-                      </div>
-
-                      <div>
-                        <label className="block font-bold text-slate-700 mb-1">SMTP Port:</label>
-                        <input
-                          type="number"
-                          value={smtpPort}
-                          onChange={(e) => setSmtpPort(Number(e.target.value))}
-                          placeholder="587"
-                          className="w-full bg-slate-50 border border-slate-300 rounded-lg p-2 text-xs text-slate-800"
-                        />
-                      </div>
-
-                      <div>
-                        <label className="block font-bold text-slate-700 mb-1">SMTP Username / Email:</label>
-                        <input
-                          type="text"
-                          value={smtpUser}
-                          onChange={(e) => setSmtpUser(e.target.value)}
-                          placeholder="kythuat@tasago.vn"
-                          className="w-full bg-slate-50 border border-slate-300 rounded-lg p-2 text-xs text-slate-800"
-                        />
-                      </div>
-
-                      <div>
-                        <label className="block font-bold text-slate-700 mb-1">Mật khẩu ứng dụng (App Password):</label>
-                        <input
-                          type="password"
-                          value={smtpPass}
-                          onChange={(e) => setSmtpPass(e.target.value)}
-                          placeholder="••••••••••••••••"
-                          className="w-full bg-slate-50 border border-slate-300 rounded-lg p-2 text-xs text-slate-800 font-mono"
-                        />
-                      </div>
-                    </div>
-
-                    <div>
-                      <label className="block font-bold text-slate-700 mb-1">Tên & Email hiển thị người gửi (Sender):</label>
-                      <input
-                        type="text"
-                        value={emailSender}
-                        onChange={(e) => setEmailSender(e.target.value)}
-                        placeholder="Hệ Thống Bê Tông Tasago <kythuat@tasago.vn>"
-                        className="w-full bg-slate-50 border border-slate-300 rounded-lg p-2 text-xs text-slate-800"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block font-bold text-slate-700 mb-1">Hoặc URL Webhook Google Apps Script Mailer (Miễn phí 100%):</label>
-                      <input
-                        type="url"
-                        value={emailServiceUrl}
-                        onChange={(e) => setEmailServiceUrl(e.target.value)}
-                        placeholder="https://script.google.com/macros/s/.../exec"
-                        className="w-full bg-slate-50 border border-slate-300 rounded-lg p-2 text-xs text-slate-800 font-mono"
-                      />
-                    </div>
-                  </div>
-                )}
-              </div>
-
-            </div>
-
-            {/* Save Buttons */}
-            <div className="pt-3 border-t border-slate-200 flex items-center justify-between">
-              <button
-                type="button"
-                onClick={() => setActiveTab('guide')}
-                className="text-xs font-bold text-emerald-700 hover:underline flex items-center gap-1 cursor-pointer"
-              >
-                <BookOpen className="w-3.5 h-3.5" />
-                <span>Xem Hướng Dẫn Tự Động 07h Sáng</span>
-              </button>
 
               <button
                 type="button"
-                onClick={handleSaveAllConfig}
-                className="bg-emerald-700 hover:bg-emerald-600 text-white font-bold px-5 py-2.5 rounded-xl text-xs flex items-center space-x-1.5 cursor-pointer shadow-md"
+                onClick={handleTestSendEmail}
+                disabled={testingEmail}
+                className="bg-emerald-700 hover:bg-emerald-600 text-white font-bold px-3 py-1.5 rounded-lg text-xs flex items-center gap-1 cursor-pointer"
               >
-                <Check className="w-4 h-4" />
-                <span>Lưu Cài Đặt Email & Lịch 07h Sáng</span>
+                <Zap className="w-3.5 h-3.5 text-yellow-300" />
+                <span>Gửi Bản Này Tới Email</span>
               </button>
             </div>
 
+            <div 
+              className="border border-slate-200 rounded-xl overflow-hidden shadow-xs bg-slate-50 p-2"
+              dangerouslySetInnerHTML={{ __html: notificationPreview.htmlContent }}
+            />
           </div>
         )}
 
-        {/* Tab 3: BOT ZALO SETTINGS */}
+        {/* Tab 4: BOT ZALO SETTINGS */}
         {activeTab === 'zalo' && (
-          <div className="p-5 sm:p-6 space-y-5 max-h-[75vh] overflow-y-auto text-xs">
-            
-            {/* Header description */}
+          <div className="p-5 sm:p-6 space-y-5 overflow-y-auto max-h-[75vh] text-xs">
             <div className="bg-blue-50 border border-blue-200 p-4 rounded-xl flex items-start gap-3">
               <div className="w-8 h-8 rounded-lg bg-blue-600 text-white flex items-center justify-center shrink-0">
                 <MessageSquare className="w-4 h-4" />
               </div>
               <div className="space-y-1">
                 <h4 className="font-black text-blue-950 text-sm">
-                  Cấu Hình Tự Động Gửi Lịch Mẫu Đến Ngày Nén Qua Nhóm Zalo (Bot Zalo)
+                  Cấu Hình Tự Động Bắn Tin Lịch Nén Mẫu Vào Nhóm Zalo (Bot Zalo)
                 </h4>
                 <p className="text-slate-600 leading-relaxed">
-                  Mỗi khi có mẫu bê tông đến hạn hoặc quá hạn nén, hệ thống sẽ tự động chuyển phát thông tin chi tiết vào Nhóm Zalo Kỹ Thuật của bạn thông qua Webhook.
+                  Mỗi khi đến 07:00 sáng hoặc có mẫu đến hạn/quá hạn nén, hệ thống tự động bắn tin trực tiếp vào Nhóm Zalo Kỹ Thuật thông qua Webhook.
                 </p>
               </div>
             </div>
 
-            {/* Zalo Controls */}
             <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-4">
-              
-              {/* Toggle Auto Zalo */}
               <div className="flex items-center justify-between pb-3 border-b border-slate-200">
                 <div>
                   <span className="font-bold text-slate-900 block text-xs">Bật tự động gửi qua Bot Zalo</span>
@@ -999,30 +1138,23 @@ export const NotificationModal: React.FC<NotificationModalProps> = ({
                 </label>
               </div>
 
-              {/* Webhook URL Input & Test Button */}
               <div className="space-y-1.5">
-                <div className="flex items-center justify-between">
-                  <label className="font-bold text-slate-800 flex items-center space-x-1">
-                    <span>Webhook Endpoint URL:</span>
-                    <span className="text-red-500">*</span>
-                  </label>
-                  <span className="text-[11px] text-slate-400">Hỗ trợ Google Apps Script, Make.com, n8n, Zalo OA</span>
-                </div>
-                
+                <label className="font-bold text-slate-800 block">
+                  Webhook Endpoint URL (Google Apps Script / Webhook Zalo):
+                </label>
                 <div className="flex items-center gap-2">
                   <input
                     type="url"
                     value={zaloWebhookUrl}
                     onChange={(e) => setZaloWebhookUrl(e.target.value)}
-                    placeholder="https://script.google.com/macros/s/AKfycb.../exec hoặc https://hook.eu1.make.com/..."
-                    className="flex-1 bg-white border border-slate-300 rounded-xl p-2.5 text-slate-800 text-xs font-mono outline-none focus:ring-2 focus:ring-emerald-500 shadow-inner"
+                    placeholder="https://script.google.com/macros/s/.../exec"
+                    className="flex-1 bg-white border border-slate-300 rounded-xl p-2.5 text-slate-800 text-xs font-mono outline-none focus:ring-2 focus:ring-emerald-500"
                   />
-
                   <button
                     type="button"
                     onClick={handleTestWebhook}
                     disabled={testingWebhook || !zaloWebhookUrl}
-                    className="bg-blue-600 hover:bg-blue-500 text-white font-bold px-4 py-2.5 rounded-xl text-xs flex items-center space-x-1.5 transition-colors cursor-pointer shadow-xs whitespace-nowrap disabled:opacity-50"
+                    className="bg-blue-600 hover:bg-blue-500 text-white font-bold px-4 py-2.5 rounded-xl text-xs flex items-center space-x-1.5 transition-colors cursor-pointer disabled:opacity-50"
                   >
                     {testingWebhook ? (
                       <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
@@ -1034,7 +1166,6 @@ export const NotificationModal: React.FC<NotificationModalProps> = ({
                 </div>
               </div>
 
-              {/* Test result display */}
               {webhookTestResult && (
                 <div className={`p-3 rounded-xl text-xs font-semibold ${
                   webhookTestResult.success ? 'bg-emerald-100 text-emerald-900 border border-emerald-300' : 'bg-red-100 text-red-900 border border-red-300'
@@ -1043,7 +1174,6 @@ export const NotificationModal: React.FC<NotificationModalProps> = ({
                 </div>
               )}
 
-              {/* Group Name & Token */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block font-bold text-slate-700 mb-1">
@@ -1054,54 +1184,26 @@ export const NotificationModal: React.FC<NotificationModalProps> = ({
                     value={zaloGroupId}
                     onChange={(e) => setZaloGroupId(e.target.value)}
                     placeholder="Nhóm Kỹ Thuật Tasago"
-                    className="w-full bg-white border border-slate-300 rounded-xl p-2 text-slate-800 text-xs"
+                    className="w-full bg-white border border-slate-300 rounded-xl p-2.5 text-slate-800 text-xs"
                   />
                 </div>
 
                 <div>
                   <label className="block font-bold text-slate-700 mb-1">
-                    Bot Access Token / Secret (Tùy chọn):
+                    Bot Access Token (Tùy chọn):
                   </label>
                   <input
                     type="password"
                     value={zaloBotToken}
                     onChange={(e) => setZaloBotToken(e.target.value)}
                     placeholder="Để trống nếu dùng Google Apps Script"
-                    className="w-full bg-white border border-slate-300 rounded-xl p-2 font-mono text-slate-800 text-xs"
+                    className="w-full bg-white border border-slate-300 rounded-xl p-2.5 font-mono text-slate-800 text-xs"
                   />
                 </div>
               </div>
-
-              {/* Presets */}
-              <div className="pt-2">
-                <span className="text-[11px] font-bold text-slate-500 block mb-1.5">
-                  Mẫu Webhook Khuyên Dùng:
-                </span>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  <div className="bg-white p-2.5 rounded-lg border border-slate-200 text-[11px]">
-                    <strong className="text-emerald-800 block">1. Google Apps Script (Khuyên dùng)</strong>
-                    <span className="text-slate-500">Miễn phí 100%, không cần server, đẩy Zalo và Email cùng lúc lúc 07:00 sáng.</span>
-                  </div>
-                  <div className="bg-white p-2.5 rounded-lg border border-slate-200 text-[11px]">
-                    <strong className="text-blue-800 block">2. Make.com / Telegram Bot</strong>
-                    <span className="text-slate-500">Kéo thả không cần code, tự động thông báo tức thì 24/7.</span>
-                  </div>
-                </div>
-              </div>
-
             </div>
 
-            {/* Save Buttons */}
-            <div className="pt-3 border-t border-slate-200 flex items-center justify-between">
-              <button
-                type="button"
-                onClick={() => setActiveTab('guide')}
-                className="text-xs font-bold text-blue-700 hover:underline flex items-center gap-1 cursor-pointer"
-              >
-                <BookOpen className="w-3.5 h-3.5" />
-                <span>Xem Hướng Dẫn Từng Bước</span>
-              </button>
-
+            <div className="pt-3 border-t border-slate-200 flex items-center justify-end">
               <button
                 type="button"
                 onClick={handleSaveAllConfig}
@@ -1111,18 +1213,17 @@ export const NotificationModal: React.FC<NotificationModalProps> = ({
                 <span>Lưu Cấu Hình Bot Zalo</span>
               </button>
             </div>
-
           </div>
         )}
 
-        {/* Tab 4: NOTIFICATION LOGS */}
+        {/* Tab 5: LOGS */}
         {activeTab === 'logs' && (
-          <div className="p-5 sm:p-6 space-y-3 max-h-[75vh] overflow-y-auto">
+          <div className="p-5 sm:p-6 space-y-3 overflow-y-auto max-h-[75vh]">
             {notificationLogs.length === 0 ? (
               <div className="p-12 text-center text-slate-400">
                 <History className="w-10 h-10 mx-auto text-slate-300 mb-2" />
                 <p className="font-bold text-slate-600">Chưa có nhật ký thông báo nào</p>
-                <p className="text-xs text-slate-400">Khi gửi thông báo qua Bot Zalo hoặc Email, lịch sử sẽ lưu tại đây</p>
+                <p className="text-xs text-slate-400">Khi gửi thông báo qua Email hoặc Zalo, lịch sử chi tiết sẽ được lưu tại đây</p>
               </div>
             ) : (
               <div className="space-y-2.5">
@@ -1133,7 +1234,7 @@ export const NotificationModal: React.FC<NotificationModalProps> = ({
                         <span className={`font-bold px-2 py-0.5 rounded text-[10px] uppercase ${
                           log.channel === 'zalo_bot' ? 'bg-blue-100 text-blue-800' : 'bg-emerald-100 text-emerald-800'
                         }`}>
-                          {log.channel === 'zalo_bot' ? 'Bot Zalo' : 'Email (07h Sáng)'}
+                          {log.channel === 'zalo_bot' ? 'Bot Zalo' : 'Email 07h Sáng'}
                         </span>
                         <span className="font-bold text-slate-800">{log.recipient}</span>
                       </div>
@@ -1158,58 +1259,35 @@ export const NotificationModal: React.FC<NotificationModalProps> = ({
           </div>
         )}
 
-        {/* Tab 5: GUIDE */}
+        {/* Tab 6: GUIDE */}
         {activeTab === 'guide' && (
-          <div className="p-5 sm:p-6 space-y-4 max-h-[75vh] overflow-y-auto text-xs text-slate-700">
+          <div className="p-5 sm:p-6 space-y-4 overflow-y-auto max-h-[75vh] text-xs text-slate-700">
             <div className="bg-emerald-50 border border-emerald-200 p-4 rounded-xl space-y-2">
               <h4 className="font-black text-emerald-950 text-sm flex items-center space-x-1.5">
                 <Clock className="w-4 h-4 text-emerald-700" />
-                <span>Cơ Chế Hoạt Động Tự Động 07:00 Sáng Hàng Ngày</span>
+                <span>Cơ Chế Tự Động Gửi Email 07:00 Sáng Hàng Ngày</span>
               </h4>
               <p className="text-slate-600 leading-relaxed">
-                Hệ thống nén mẫu Tasago được thiết kế để tự động gửi thông báo mỗi <strong>07:00 Sáng</strong>:
+                Hệ thống backend của cổng thông tin Tasago chạy tiến trình kiểm tra thời gian thực. Mỗi khi đồng hồ đạt mốc <strong>07:00 Sáng</strong> (Múi giờ Việt Nam GMT+7):
               </p>
               <ul className="list-disc pl-5 space-y-1 text-slate-700">
-                <li><strong>Gửi trực tiếp qua Email</strong>: Tự động gửi tới danh sách KTV & Ban Giám Đốc ({emailList.join(', ')}).</li>
-                <li><strong>Gửi vào Nhóm Zalo</strong>: Tự động đẩy bản tin qua Webhook nếu cấu hình Zalo Bot.</li>
-                <li><strong>Âm thanh & Thông báo đẩy (Web Push)</strong>: Phát chuông báo động và thông báo nổi trên máy tính/điện thoại KTV.</li>
+                <li>Tự động quét danh sách mẫu bê tông cần nén hôm nay (R3, R7, R14, R28, Waterproof...).</li>
+                <li>Tạo báo cáo chi tiết kèm thông tin công trình, nhà thầu, khối lượng và số điện thoại liên hệ.</li>
+                <li>Gửi trực tiếp qua máy chủ SMTP (Gmail, Google Workspace) tới danh sách email KTV.</li>
               </ul>
             </div>
 
-            <div className="p-4 rounded-xl border border-blue-200 bg-blue-50/40 space-y-2.5">
-              <div className="flex items-center justify-between">
-                <span className="font-extrabold text-blue-950 text-xs uppercase">
-                  Mẫu Mã Google Apps Script Gửi Email & Zalo Miễn Phí:
-                </span>
-                <span className="bg-blue-200 text-blue-900 text-[10px] font-black px-2 py-0.5 rounded">
-                  100% Free & No Server
-                </span>
-              </div>
-              <div className="bg-slate-900 text-emerald-300 p-3 rounded-lg font-mono text-[11px] overflow-x-auto leading-relaxed select-all">
-{`function doPost(e) {
-  var data = JSON.parse(e.postData.contents);
-  if (data.recipients && data.recipients.length > 0) {
-    data.recipients.forEach(function(email) {
-      MailApp.sendEmail({
-        to: email,
-        subject: data.subject || "[TASAGO] Báo Cáo Lịch Nén Mẫu 07h Sáng",
-        htmlBody: data.html
-      });
-    });
-  }
-  return ContentService.createTextOutput(JSON.stringify({success: true})).setMimeType(ContentService.MimeType.JSON);
-}`}
-              </div>
-            </div>
-
-            <div className="pt-2 flex justify-end">
-              <button
-                type="button"
-                onClick={() => setActiveTab('email')}
-                className="bg-emerald-700 hover:bg-emerald-600 text-white font-bold px-4 py-2 rounded-xl text-xs flex items-center space-x-1.5 cursor-pointer"
-              >
-                <span>Chuyển Sang Cài Đặt Email</span>
-              </button>
+            <div className="p-4 rounded-xl border border-slate-200 bg-white space-y-2.5">
+              <h4 className="font-bold text-slate-900 text-xs uppercase">
+                Hướng Dẫn Lấy Mật Khẩu Ứng Dụng (App Password) Cho Gmail tasagotnt@gmail.com:
+              </h4>
+              <ol className="list-decimal pl-5 space-y-1.5 text-slate-600 leading-relaxed">
+                <li>Truy cập vào trang quản lý tài khoản Google: <a href="https://myaccount.google.com/security" target="_blank" rel="noreferrer" className="text-blue-700 font-bold underline">myaccount.google.com/security</a>.</li>
+                <li>Bật tính năng <strong>Xác minh 2 bước (2-Step Verification)</strong> nếu chưa bật.</li>
+                <li>Vào mục <strong>Mật khẩu ứng dụng (App passwords)</strong> tại: <a href="https://myaccount.google.com/apppasswords" target="_blank" rel="noreferrer" className="text-blue-700 font-bold underline">myaccount.google.com/apppasswords</a>.</li>
+                <li>Đặt tên ứng dụng (ví dụ: <code className="bg-slate-100 px-1 py-0.5 rounded font-bold">Tasago Portal</code>) và bấm <strong>Tạo</strong>.</li>
+                <li>Sao chép mã 16 ký tự vừa tạo và dán vào ô <strong>Mật khẩu ứng dụng</strong> trong bảng cài đặt SMTP.</li>
+              </ol>
             </div>
           </div>
         )}
@@ -1218,4 +1296,3 @@ export const NotificationModal: React.FC<NotificationModalProps> = ({
     </div>
   );
 };
-

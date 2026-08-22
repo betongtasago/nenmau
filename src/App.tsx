@@ -94,6 +94,17 @@ export default function App() {
     setSamples(fresh);
     saveSamples(fresh);
 
+    // Sync to backend server for 24/7 background 07:00 AM Cron
+    fetch('/api/server-sync', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        samples: fresh,
+        stations,
+        config: notificationConfig
+      })
+    }).catch(() => {});
+
     // 100% Automated Background Notification Check (Triggers at 07:00 AM VN Time)
     if (currentUser) {
       checkAndTriggerAutoNotifications(fresh, stations, notificationConfig).catch(console.error);
